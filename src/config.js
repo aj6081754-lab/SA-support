@@ -3,6 +3,8 @@ module.exports = {
   channels: {
     suggestionsPanel: "1544183117747716116",
     suggestions: "1544183181756989460",
+    suggestionsReview: "1544480635006226432",
+    suggestionsFinal: "1544480792229707776",
     ticketsPanel: "1544167144009375784",
   },
   emojis: {
