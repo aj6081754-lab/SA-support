@@ -15,15 +15,43 @@ async function sendSuggestionsPanel(client) {
   const channel = await client.channels.fetch(
     config.channels.suggestionsPanel
   );
+
   if (!channel) {
     console.error(
       "❌ No se encontró el canal del panel de sugerencias."
     );
     return;
   }
+
+  // Buscar si ya existe un panel del bot
+  const messages = await channel.messages.fetch({
+    limit: 50,
+  });
+
+  const existingPanel = messages.find(
+    (message) =>
+      message.author.id === client.user.id &&
+      message.embeds.length > 0 &&
+      message.components.length > 0 &&
+      message.components[0].components.some(
+        (component) =>
+          component.customId === "suggestion_create"
+      )
+  );
+
+  // Si ya existe, no crear otro
+  if (existingPanel) {
+    console.log(
+      "✅ El panel de sugerencias ya existe."
+    );
+    return;
+  }
+
   const embed = new EmbedBuilder()
     .setColor("#F5C542")
-    .setTitle(`${config.emojis.suggestion} Sugerencias`)
+    .setTitle(
+      `${config.emojis.suggestion} Sugerencias`
+    )
     .setDescription(
       "¿Tienes una idea para mejorar Staff Analytics?\n\n" +
       "Presiona el botón de abajo para enviar tu sugerencia."
@@ -31,17 +59,25 @@ async function sendSuggestionsPanel(client) {
     .setFooter({
       text: "Staff Support • Sistema de sugerencias",
     });
+
   const button = new ButtonBuilder()
     .setCustomId("suggestion_create")
     .setLabel("Enviar sugerencia")
     .setEmoji(config.emojis.suggestion)
     .setStyle(ButtonStyle.Primary);
-  const row = new ActionRowBuilder().addComponents(button);
+
+  const row = new ActionRowBuilder().addComponents(
+    button
+  );
+
   await channel.send({
     embeds: [embed],
     components: [row],
   });
-  console.log("✅ Panel de sugerencias enviado.");
+
+  console.log(
+    "✅ Panel de sugerencias enviado."
+  );
 }
 // ==================================================
 // MODAL DE SUGERENCIA
