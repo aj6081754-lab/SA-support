@@ -1,0 +1,12 @@
+{
+  "name": "staff-support",
+  "version": "1.0.0",
+  "description": "Bot de soporte para Staff Analytics",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.25.1"
+  }
+}
