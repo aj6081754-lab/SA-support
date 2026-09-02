@@ -24,15 +24,7 @@ const suggestions = new Map();
 // EMOJIS
 // ======================================================
 
-const EMOJIS = {
-  suggestion: config.emojis.suggestion,
-
-  like: config.emojis.like,
-  dislike: config.emojis.dislike,
-
-  accept: "<a:aceptar:1544538371534102588>",
-  deny: "<a:denegar:1544535287143735406>",
-};
+const EMOJIS = config.emojis;
 
 // ======================================================
 // UTILIDADES
