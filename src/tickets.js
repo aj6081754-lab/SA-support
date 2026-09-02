@@ -33,26 +33,22 @@ const tickets = new Map();
 const TICKET_TYPES = {
   general_support: {
     label: "General Support",
-    emoji:
-      config.emojis.generalSupport,
+    emoji: config.emojis.generalSupport,
   },
 
   report_bugs: {
-    label: "Report Bugs",
-    emoji:
-      config.emojis.reportBugs,
+    label: "Report bugs",
+    emoji: config.emojis.reportBugs,
   },
 
   get_help: {
-    label: "Get Help",
-    emoji:
-      config.emojis.getHelp,
+    label: "Get help",
+    emoji: config.emojis.getHelp,
   },
 
   other: {
     label: "Other",
-    emoji:
-      config.emojis.other,
+    emoji: config.emojis.other,
   },
 };
 
@@ -60,9 +56,7 @@ const TICKET_TYPES = {
 // CREAR PANEL
 // ==================================================
 
-async function sendTicketsPanel(
-  client
-) {
+async function sendTicketsPanel(client) {
   const channel =
     await client.channels.fetch(
       config.channels.ticketsPanel
@@ -79,64 +73,60 @@ async function sendTicketsPanel(
 
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      "# 🎫 Staff Support\n\n" +
-        "¿Necesitas ayuda?\n\n" +
-        "Selecciona una categoría en el menú inferior para abrir un ticket."
+      "**SA Support tickets <:G_help:1544545493856559154>**\n\n" +
+        "**Panels**\n\n" +
+
+        `**General Support ${config.emojis.generalSupport}**\n` +
+        "- Get Support from the staff team\n" +
+        "-# questions about the bot goes in get help\n\n" +
+
+        `**Report bugs ${config.emojis.reportBugs}**\n` +
+        "- Report bot, server or support bot bugs\n\n" +
+
+        `**Get help ${config.emojis.getHelp}**\n` +
+        "- Get help to config bot, answer your questions and other things related\n\n" +
+
+        `**Other ${config.emojis.other}**\n` +
+        "- any panel describes your problem? Open this ticket tu get support\n\n" +
+
+        `-# Joke tickets can be Sanctioned ${config.emojis.reportBugs}`
     )
   );
 
   const menu =
     new StringSelectMenuBuilder()
-      .setCustomId(
-        "ticket_category"
-      )
+      .setCustomId("ticket_category")
       .setPlaceholder(
         "Selecciona una categoría"
       )
       .addOptions(
         {
-          label:
-            "General Support",
+          label: "General Support",
           description:
-            "Ayuda general",
-          value:
-            "general_support",
-          emoji:
-            config.emojis
-              .generalSupport,
+            "Get Support from the staff team",
+          value: "general_support",
+          emoji: config.emojis.generalSupport,
         },
         {
-          label:
-            "Report Bugs",
+          label: "Report bugs",
           description:
-            "Reporta un error o bug",
-          value:
-            "report_bugs",
-          emoji:
-            config.emojis
-              .reportBugs,
+            "Report bot, server or support bot bugs",
+          value: "report_bugs",
+          emoji: config.emojis.reportBugs,
         },
         {
-          label:
-            "Get Help",
+          label: "Get help",
           description:
-            "Necesitas ayuda con algo",
-          value:
-            "get_help",
-          emoji:
-            config.emojis
-              .getHelp,
+            "Get help to config bot, answer your questions and other things related",
+          value: "get_help",
+          emoji: config.emojis.getHelp,
         },
         {
-          label:
-            "Other",
+          label: "Other",
           description:
-            "Otro tipo de solicitud",
-          value:
-            "other",
-          emoji:
-            config.emojis
-              .other,
+            "Open this ticket to get support",
+          value: "other",
+          emoji: config.emojis.other,
         }
       );
 
@@ -148,9 +138,7 @@ async function sendTicketsPanel(
 
   await channel.send({
     components: [container],
-
-    flags:
-      MessageFlags.IsComponentsV2,
+    flags: MessageFlags.IsComponentsV2,
   });
 
   console.log(
@@ -159,7 +147,7 @@ async function sendTicketsPanel(
 }
 
 // ==================================================
-// MODAL GENERAL
+// MODAL GENERAL SUPPORT
 // ==================================================
 
 async function showGeneralSupportModal(
@@ -180,14 +168,14 @@ async function showGeneralSupportModal(
         "ticket_reason"
       )
       .setLabel(
-        "¿En qué podemos ayudarte?"
+        "¿Que necesitas?"
       )
       .setStyle(
         TextInputStyle.Paragraph
       )
       .setRequired(true)
       .setPlaceholder(
-        "Describe tu problema..."
+        "Describe lo que necesitas..."
       )
       .setMaxLength(1000);
 
@@ -224,14 +212,14 @@ async function showGetHelpModal(
         "ticket_reason"
       )
       .setLabel(
-        "¿Qué necesitas?"
+        "¿Cuál es tu duda?"
       )
       .setStyle(
         TextInputStyle.Paragraph
       )
       .setRequired(true)
       .setPlaceholder(
-        "Explica lo que necesitas..."
+        "Explica tu duda..."
       )
       .setMaxLength(1000);
 
@@ -264,27 +252,43 @@ async function showBugMenu(
       .addOptions(
         {
           label:
-            "Discord Bot",
+            "Server bugs",
           description:
-            "Problema relacionado con el bot",
+            "Report server bugs",
           value:
-            "discord_bot",
+            "server_bugs",
         },
         {
           label:
-            "Website",
+            "Bot bugs",
           description:
-            "Problema relacionado con la web",
+            "Report bot bugs",
           value:
-            "website",
+            "bot_bugs",
         },
         {
           label:
-            "Other",
+            "web bugs",
           description:
-            "Otro problema",
+            "Report web bugs",
           value:
-            "other",
+            "web_bugs",
+        },
+        {
+          label:
+            "Support bot bugs",
+          description:
+            "Report support bot bugs",
+          value:
+            "support_bot_bugs",
+        },
+        {
+          label:
+            "Other bugs",
+          description:
+            "Report other bugs",
+          value:
+            "other_bugs",
         }
       );
 
@@ -440,20 +444,30 @@ async function createTicket(
     ticket
   );
 
+  // ==================================================
+  // EMBED INICIAL
+  // ==================================================
+
   const embed =
     new EmbedBuilder()
       .setColor(0x5865f2)
       .setTitle(
-        `${category.emoji} ${category.label}`
+        "SA Support tickets <:G_help:1544545493856559154>"
       )
       .setDescription(
-        `**Usuario:** <@${interaction.user.id}>\n\n` +
-          `**Solicitud:**\n${reason}`
-      )
-      .setFooter({
-        text:
-          "Staff Support",
-      });
+        `**Selected panel:** ${category.emoji} ${category.label}\n\n` +
+
+        `**User info:**\n` +
+        `user: <@${interaction.user.id}>\n` +
+        `id: \`${interaction.user.id}\`\n\n` +
+
+        `**Questions:**\n\n` +
+        `1.${reason}`
+      );
+
+  // ==================================================
+  // BOTONES
+  // ==================================================
 
   const claimButton =
     new ButtonBuilder()
@@ -495,7 +509,9 @@ async function createTicket(
   await channel.send({
     content:
       `<@&${config.roles.staff}> <@${interaction.user.id}>`,
+
     embeds: [embed],
+
     components: [row],
   });
 
@@ -719,16 +735,24 @@ async function claimTicket(
     }
   );
 
+  // ==================================================
+  // EMBED DE TICKET RECLAMADO
+  // ==================================================
+
   const embed =
     new EmbedBuilder()
       .setColor(0x5865f2)
+      .setTitle(
+        `ticket reclamado ${config.emojis.claim}`
+      )
       .setDescription(
-        `<@${interaction.user.id}> ha reclamado este ticket.`
+        `Ahora <@${interaction.user.id}> sera el encargado de atenderte, por favor se paciente y trátalo con respeto`
       );
 
   await interaction.channel.send({
     content:
       `<@${ticket.userId}>`,
+
     embeds: [embed],
   });
 
@@ -1157,43 +1181,15 @@ async function handleTicketInteraction(
       return true;
     }
 
+    // OTHER CREA EL TICKET DIRECTAMENTE
     if (
       value ===
       "other"
     ) {
-      const modal =
-        new ModalBuilder()
-          .setCustomId(
-            "ticket_modal_other"
-          )
-          .setTitle(
-            "Other"
-          );
-
-      const input =
-        new TextInputBuilder()
-          .setCustomId(
-            "ticket_reason"
-          )
-          .setLabel(
-            "¿En qué podemos ayudarte?"
-          )
-          .setStyle(
-            TextInputStyle.Paragraph
-          )
-          .setRequired(true)
-          .setMaxLength(
-            1000
-          );
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(
-          input
-        )
-      );
-
-      await interaction.showModal(
-        modal
+      await createTicket(
+        interaction,
+        "other",
+        "Sin descripción"
       );
 
       return true;
@@ -1290,24 +1286,6 @@ async function handleTicketInteraction(
       await createTicket(
         interaction,
         "get_help",
-        reason
-      );
-
-      return true;
-    }
-
-    if (
-      interaction.customId ===
-      "ticket_modal_other"
-    ) {
-      const reason =
-        interaction.fields.getTextInputValue(
-          "ticket_reason"
-        );
-
-      await createTicket(
-        interaction,
-        "other",
         reason
       );
 
