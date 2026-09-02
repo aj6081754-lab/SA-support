@@ -9,6 +9,7 @@ const app = express();
 // ==================================================
 
 const DATA_DIR = "/data";
+
 const TRANSCRIPTS_DIR = path.join(
   DATA_DIR,
   "transcripts"
@@ -19,13 +20,22 @@ const ASSETS_DIR = path.join(
   "transcript-assets"
 );
 
-fs.mkdirSync(TRANSCRIPTS_DIR, {
-  recursive: true,
-});
+const STAFF_ROLE_ID =
+  "1544542919086571520";
 
-fs.mkdirSync(ASSETS_DIR, {
-  recursive: true,
-});
+fs.mkdirSync(
+  TRANSCRIPTS_DIR,
+  {
+    recursive: true,
+  }
+);
+
+fs.mkdirSync(
+  ASSETS_DIR,
+  {
+    recursive: true,
+  }
+);
 
 // ==================================================
 // UTILIDADES
@@ -33,21 +43,46 @@ fs.mkdirSync(ASSETS_DIR, {
 
 function escapeHTML(text) {
   return String(text ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 }
 
 function safeFileName(name) {
-  return String(name || "file")
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .slice(0, 150);
+  return String(
+    name || "file"
+  )
+    .replace(
+      /[^a-zA-Z0-9._-]/g,
+      "_"
+    )
+    .slice(
+      0,
+      150
+    );
 }
 
 function safeId(id) {
-  return String(id || "").replace(
+  return String(
+    id || ""
+  ).replace(
     /[^a-zA-Z0-9_-]/g,
     ""
   );
@@ -65,98 +100,127 @@ function formatMentions(
     return "";
   }
 
-  let text = escapeHTML(content);
+  let text =
+    escapeHTML(
+      content
+    );
 
   // @everyone
-  text = text.replace(
-    /@everyone/g,
-    `<span class="mention">@everyone</span>`
-  );
+  text =
+    text.replace(
+      /@everyone/g,
+      `<span class="mention">@everyone</span>`
+    );
 
   // @here
-  text = text.replace(
-    /@here/g,
-    `<span class="mention">@here</span>`
-  );
+  text =
+    text.replace(
+      /@here/g,
+      `<span class="mention">@here</span>`
+    );
 
   // Usuarios
-  text = text.replace(
-    /&lt;@!?(\d+)&gt;/g,
-    (match, userId) => {
-      const member =
-        guild?.members?.cache?.get(
-          userId
-        );
+  text =
+    text.replace(
+      /&lt;@!?(\d+)&gt;/g,
+      (
+        match,
+        userId
+      ) => {
+        const member =
+          guild?.members?.cache?.get(
+            userId
+          );
 
-      const user =
-        member?.user ||
-        guild?.client?.users?.cache?.get(
-          userId
-        );
+        const user =
+          member?.user ||
+          guild?.client?.users?.cache?.get(
+            userId
+          );
 
-      const name =
-        member?.displayName ||
-        user?.username ||
-        userId;
+        const name =
+          member?.displayName ||
+          user?.username ||
+          userId;
 
-      return `
-        <span
-          class="mention"
-          title="${escapeHTML(userId)}"
-        >
-          @${escapeHTML(name)}
-        </span>
-      `;
-    }
-  );
+        return `
+          <span
+            class="mention"
+            title="${escapeHTML(
+              userId
+            )}"
+          >
+            @${escapeHTML(
+              name
+            )}
+          </span>
+        `;
+      }
+    );
 
   // Roles
-  text = text.replace(
-    /&lt;@&amp;(\d+)&gt;/g,
-    (match, roleId) => {
-      const role =
-        guild?.roles?.cache?.get(
-          roleId
-        );
+  text =
+    text.replace(
+      /&lt;@&amp;(\d+)&gt;/g,
+      (
+        match,
+        roleId
+      ) => {
+        const role =
+          guild?.roles?.cache?.get(
+            roleId
+          );
 
-      const name =
-        role?.name ||
-        roleId;
+        const name =
+          role?.name ||
+          roleId;
 
-      return `
-        <span
-          class="mention"
-          title="${escapeHTML(roleId)}"
-        >
-          @${escapeHTML(name)}
-        </span>
-      `;
-    }
-  );
+        return `
+          <span
+            class="mention"
+            title="${escapeHTML(
+              roleId
+            )}"
+          >
+            @${escapeHTML(
+              name
+            )}
+          </span>
+        `;
+      }
+    );
 
   // Canales
-  text = text.replace(
-    /&lt;#(\d+)&gt;/g,
-    (match, channelId) => {
-      const channel =
-        guild?.channels?.cache?.get(
-          channelId
-        );
+  text =
+    text.replace(
+      /&lt;#(\d+)&gt;/g,
+      (
+        match,
+        channelId
+      ) => {
+        const channel =
+          guild?.channels?.cache?.get(
+            channelId
+          );
 
-      const name =
-        channel?.name ||
-        channelId;
+        const name =
+          channel?.name ||
+          channelId;
 
-      return `
-        <span
-          class="channel-mention"
-          title="${escapeHTML(channelId)}"
-        >
-          #${escapeHTML(name)}
-        </span>
-      `;
-    }
-  );
+        return `
+          <span
+            class="channel-mention"
+            title="${escapeHTML(
+              channelId
+            )}"
+          >
+            #${escapeHTML(
+              name
+            )}
+          </span>
+        `;
+      }
+    );
 
   return text;
 }
@@ -174,7 +238,12 @@ function formatCustomEmojis(
 
   return content.replace(
     /&lt;(a?):([a-zA-Z0-9_]+):(\d+)&gt;/g,
-    (match, animated, name, id) => {
+    (
+      match,
+      animated,
+      name,
+      id
+    ) => {
       const extension =
         animated === "a"
           ? "gif"
@@ -187,8 +256,12 @@ function formatCustomEmojis(
         <img
           class="custom-emoji"
           src="${url}"
-          alt=":${escapeHTML(name)}:"
-          title=":${escapeHTML(name)}:"
+          alt=":${escapeHTML(
+            name
+          )}:"
+          title=":${escapeHTML(
+            name
+          )}:"
         >
       `;
     }
@@ -214,26 +287,27 @@ function formatContent(
     );
 
   // Links
-  result = result.replace(
-    /(?<!["'=])(https?:\/\/[^\s<]+)/gi,
-    (url) => {
-      const cleanUrl =
-        url.replace(
-          /[),.!?]+$/g,
-          ""
-        );
+  result =
+    result.replace(
+      /(?<!["'=])(https?:\/\/[^\s<]+)/gi,
+      (url) => {
+        const cleanUrl =
+          url.replace(
+            /[),.!?]+$/g,
+            ""
+          );
 
-      return `
-        <a
-          href="${cleanUrl}"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          ${cleanUrl}
-        </a>
-      `;
-    }
-  );
+        return `
+          <a
+            href="${cleanUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            ${cleanUrl}
+          </a>
+        `;
+      }
+    );
 
   result =
     formatCustomEmojis(
@@ -328,7 +402,10 @@ async function saveAttachment(
   if (!success) {
     return {
       type: "link",
-      url: attachment.url,
+
+      url:
+        attachment.url,
+
       name:
         attachment.name ||
         "Archivo",
@@ -358,6 +435,27 @@ async function saveAttachment(
       attachment.contentType ||
       "",
   };
+}
+
+// ==================================================
+// COMPROBAR STAFF
+// ==================================================
+
+function isStaffMember(
+  message,
+  guild
+) {
+  const member =
+    message.member ||
+    guild?.members?.cache?.get(
+      message.author?.id
+    );
+
+  return Boolean(
+    member?.roles?.cache?.has(
+      STAFF_ROLE_ID
+    )
+  );
 }
 
 // ==================================================
@@ -400,8 +498,7 @@ async function prepareMessages(
       }
     }
 
-    const embeds =
-      [];
+    const embeds = [];
 
     if (
       message.embeds &&
@@ -511,12 +608,25 @@ async function prepareMessages(
       "Usuario";
 
     const avatar =
-      message.author?.displayAvatarURL
-        ? message.author.displayAvatarURL({
-            extension: "png",
-            size: 128,
-          })
+      message.author
+        ?.displayAvatarURL
+        ? message.author.displayAvatarURL(
+            {
+              extension: "png",
+              size: 128,
+            }
+          )
         : null;
+
+    // ==================================================
+    // DETECTAR STAFF
+    // ==================================================
+
+    const staff =
+      isStaffMember(
+        message,
+        guild
+      );
 
     result.push({
       id:
@@ -541,6 +651,8 @@ async function prepareMessages(
         Boolean(
           message.author?.bot
         ),
+
+      staff,
 
       attachments,
 
@@ -574,7 +686,10 @@ function createTranscriptHTML(
       ticket.type ||
         "support"
     )
-      .replace(/_/g, " ")
+      .replace(
+        /_/g,
+        " "
+      )
       .replace(
         /\b\w/g,
         (letter) =>
@@ -630,9 +745,11 @@ function createTranscriptHTML(
             message.reply
               ? `
                 <div class="reply">
+
                   <div class="reply-line"></div>
 
                   <div class="reply-content">
+
                     <div class="reply-author">
                       ${escapeHTML(
                         message.reply.author
@@ -645,7 +762,9 @@ function createTranscriptHTML(
                         guild
                       )}
                     </div>
+
                   </div>
+
                 </div>
               `
               : "";
@@ -660,10 +779,12 @@ function createTranscriptHTML(
                   ) {
                     return `
                       <div class="attachment">
+
                         <a
                           href="${attachment.file}"
                           target="_blank"
                         >
+
                           <img
                             class="attachment-image"
                             src="${attachment.file}"
@@ -671,19 +792,25 @@ function createTranscriptHTML(
                               attachment.name
                             )}"
                           >
+
                         </a>
+
                       </div>
                     `;
                   }
 
                   return `
                     <div class="file">
+
                       <span class="file-icon">
                         📎
                       </span>
 
                       <a
-                        href="${attachment.file || attachment.url}"
+                        href="${
+                          attachment.file ||
+                          attachment.url
+                        }"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -691,6 +818,7 @@ function createTranscriptHTML(
                           attachment.name
                         )}
                       </a>
+
                     </div>
                   `;
                 }
@@ -706,7 +834,9 @@ function createTranscriptHTML(
                     ${
                       embed.color
                         ? `style="border-left-color:#${embed.color
-                            .toString(16)
+                            .toString(
+                              16
+                            )
                             .padStart(
                               6,
                               "0"
@@ -719,6 +849,7 @@ function createTranscriptHTML(
                       embed.title
                         ? `
                           <div class="embed-title">
+
                             ${
                               embed.url
                                 ? `
@@ -737,6 +868,7 @@ function createTranscriptHTML(
                                     embed.title
                                   )
                             }
+
                           </div>
                         `
                         : ""
@@ -778,6 +910,7 @@ function createTranscriptHTML(
             message.sticker?.url
               ? `
                 <div class="sticker">
+
                   <img
                     src="${escapeHTML(
                       message.sticker.url
@@ -786,9 +919,36 @@ function createTranscriptHTML(
                       message.sticker.name
                     )}"
                   >
+
                 </div>
               `
               : "";
+
+          // ==================================================
+          // ETIQUETAS
+          // ==================================================
+
+          const tagsHTML = `
+            ${
+              message.bot
+                ? `
+                  <span class="bot-tag">
+                    BOT
+                  </span>
+                `
+                : ""
+            }
+
+            ${
+              message.staff
+                ? `
+                  <span class="staff-tag">
+                    STAFF
+                  </span>
+                `
+                : ""
+            }
+          `;
 
           return `
             <div
@@ -824,15 +984,7 @@ function createTranscriptHTML(
                     )}
                   </span>
 
-                  ${
-                    message.bot
-                      ? `
-                        <span class="bot-tag">
-                          BOT
-                        </span>
-                      `
-                      : ""
-                  }
+                  ${tagsHTML}
 
                 </div>
 
@@ -880,6 +1032,28 @@ function createTranscriptHTML(
                       guild
                     );
 
+                  const threadTags = `
+                    ${
+                      message.bot
+                        ? `
+                          <span class="bot-tag">
+                            BOT
+                          </span>
+                        `
+                        : ""
+                    }
+
+                    ${
+                      message.staff
+                        ? `
+                          <span class="staff-tag">
+                            STAFF
+                          </span>
+                        `
+                        : ""
+                    }
+                  `;
+
                   return `
                     <div class="thread-message">
 
@@ -896,10 +1070,15 @@ function createTranscriptHTML(
                       }
 
                       <div>
+
                         <div class="thread-author">
+
                           ${escapeHTML(
                             message.author
                           )}
+
+                          ${threadTags}
+
                         </div>
 
                         <div class="thread-content">
@@ -908,6 +1087,7 @@ function createTranscriptHTML(
                             "[Sin contenido]"
                           }
                         </div>
+
                       </div>
 
                     </div>
@@ -967,9 +1147,11 @@ function createTranscriptHTML(
                   onclick="closeThread(event, ${index})"
                 >
                   ←
+
                   <span>
                     Salir del hilo
                   </span>
+
                 </button>
 
                 <div class="thread-title">
@@ -1051,8 +1233,12 @@ body {
 
 .top-panel {
   max-width: 1100px;
-  margin: 20px auto 0;
-  padding: 0 16px;
+
+  margin:
+    20px auto 0;
+
+  padding:
+    0 16px;
 }
 
 .info-panel {
@@ -1073,6 +1259,7 @@ body {
 
 .info-title {
   font-size: 20px;
+
   font-weight: 700;
 
   color: #f2f3f5;
@@ -1082,6 +1269,7 @@ body {
 
 .info-category {
   color: #949ba4;
+
   font-size: 14px;
 
   margin-bottom: 18px;
@@ -1143,7 +1331,8 @@ body {
 .channel-wrapper {
   max-width: 1100px;
 
-  margin: 18px auto 0;
+  margin:
+    18px auto 0;
 
   padding:
     0 16px 40px;
@@ -1240,6 +1429,7 @@ body {
   display: flex;
 
   align-items: center;
+
   justify-content: center;
 
   color: white;
@@ -1249,6 +1439,7 @@ body {
 
 .message-body {
   min-width: 0;
+
   flex: 1;
 }
 
@@ -1260,6 +1451,8 @@ body {
   gap: 7px;
 
   margin-bottom: 2px;
+
+  flex-wrap: wrap;
 }
 
 .username {
@@ -1269,6 +1462,10 @@ body {
 
   font-weight: 600;
 }
+
+/* ==========================================
+   BOT TAG
+   ========================================== */
 
 .bot-tag {
   background: #5865f2;
@@ -1284,6 +1481,32 @@ body {
 
   font-weight: 700;
 }
+
+/* ==========================================
+   STAFF TAG
+   ========================================== */
+
+.staff-tag {
+  background: #4e5058;
+
+  color: #f2f3f5;
+
+  border-radius: 3px;
+
+  padding:
+    1px 4px;
+
+  font-size: 9px;
+
+  font-weight: 700;
+
+  text-transform:
+    uppercase;
+}
+
+/* ==========================================
+   CONTENIDO
+   ========================================== */
 
 .content {
   color: #dbdee1;
@@ -1346,6 +1569,7 @@ body {
 
 .custom-emoji {
   width: 22px;
+
   height: 22px;
 
   object-fit: contain;
@@ -1371,6 +1595,7 @@ body {
 
 .reply-line {
   width: 28px;
+
   height: 18px;
 
   border-left:
@@ -1421,6 +1646,7 @@ body {
   display: block;
 
   max-width: 500px;
+
   max-height: 450px;
 
   border-radius: 8px;
@@ -1481,8 +1707,7 @@ body {
 
   margin-top: 8px;
 
-  padding:
-    12px;
+  padding: 12px;
 
   background: #2b2d31;
 
@@ -1541,6 +1766,7 @@ body {
 
 .sticker img {
   width: 160px;
+
   height: 160px;
 
   object-fit: contain;
@@ -1667,7 +1893,8 @@ body {
 
   cursor: pointer;
 
-  padding: 7px 10px;
+  padding:
+    7px 10px;
 
   border-radius: 5px;
 }
@@ -1708,6 +1935,7 @@ body {
 
 .thread-avatar {
   width: 36px;
+
   height: 36px;
 
   border-radius: 50%;
@@ -1723,6 +1951,14 @@ body {
   font-weight: 600;
 
   margin-bottom: 2px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  flex-wrap: wrap;
 }
 
 .thread-content {
@@ -1787,6 +2023,7 @@ body {
 
   .messages {
     padding-left: 2px;
+
     padding-right: 2px;
   }
 
@@ -1799,6 +2036,7 @@ body {
 
   .avatar {
     width: 36px;
+
     height: 36px;
   }
 
@@ -1850,6 +2088,7 @@ body {
     <div class="info-grid">
 
       <div class="info-item">
+
         <span class="info-label">
           Ticket ID
         </span>
@@ -1859,9 +2098,11 @@ body {
             ticket.id
           )}
         </span>
+
       </div>
 
       <div class="info-item">
+
         <span class="info-label">
           Usuario
         </span>
@@ -1871,9 +2112,11 @@ body {
             userName
           )}
         </span>
+
       </div>
 
       <div class="info-item">
+
         <span class="info-label">
           Categoría
         </span>
@@ -1883,9 +2126,11 @@ body {
             category
           )}
         </span>
+
       </div>
 
       <div class="info-item">
+
         <span class="info-label">
           Staff
         </span>
@@ -1893,9 +2138,11 @@ body {
         <span class="info-value">
           ${claimedBy}
         </span>
+
       </div>
 
       <div class="info-item">
+
         <span class="info-label">
           Creado
         </span>
@@ -1905,9 +2152,11 @@ body {
             createdAt
           )}
         </span>
+
       </div>
 
       <div class="info-item">
+
         <span class="info-label">
           Mensajes
         </span>
@@ -1917,6 +2166,7 @@ body {
             preparedMessages.length
           }
         </span>
+
       </div>
 
     </div>
@@ -1980,22 +2230,27 @@ body {
 <script>
 
 function openThread(index) {
+
   const thread =
     document.getElementById(
       "thread-" + index
     );
 
   if (thread) {
+
     thread.classList.add(
       "active"
     );
+
   }
+
 }
 
 function closeThread(
   event,
   index
 ) {
+
   event.stopPropagation();
 
   const thread =
@@ -2004,10 +2259,13 @@ function closeThread(
     );
 
   if (thread) {
+
     thread.classList.remove(
       "active"
     );
+
   }
+
 }
 
 </script>
@@ -2029,6 +2287,7 @@ async function saveTranscript(
   guild = null
 ) {
   try {
+
     const preparedMessages =
       await prepareMessages(
         messages,
@@ -2042,6 +2301,7 @@ async function saveTranscript(
     for (
       const thread of threads
     ) {
+
       const prepared =
         await prepareMessages(
           thread.messages,
@@ -2051,9 +2311,11 @@ async function saveTranscript(
 
       preparedThreads.push({
         ...thread,
+
         messages:
           prepared,
       });
+
     }
 
     const html =
@@ -2085,6 +2347,7 @@ async function saveTranscript(
     return ticket.id;
 
   } catch (error) {
+
     console.error(
       "❌ Error guardando transcripción:",
       error
@@ -2112,6 +2375,7 @@ app.use(
 app.get(
   "/transcript/:id",
   (req, res) => {
+
     const id =
       safeId(
         req.params.id
@@ -2128,6 +2392,7 @@ app.get(
         filePath
       )
     ) {
+
       return res
         .status(404)
         .send(`
@@ -2136,11 +2401,13 @@ app.get(
           <html lang="es">
 
           <head>
+
             <meta charset="UTF-8">
 
             <title>
               Transcript not found
             </title>
+
           </head>
 
           <body
@@ -2179,13 +2446,16 @@ app.get(
 // ==================================================
 
 function startTranscriptServer() {
+
   const port =
-    process.env.PORT || 3000;
+    process.env.PORT ||
+    3000;
 
   app.listen(
     port,
     "0.0.0.0",
     () => {
+
       console.log(
         `🌐 Servidor de transcripciones iniciado en el puerto ${port}.`
       );
@@ -2193,6 +2463,7 @@ function startTranscriptServer() {
       console.log(
         `💾 Archivos: ${DATA_DIR}`
       );
+
     }
   );
 }
@@ -2204,4 +2475,4 @@ function startTranscriptServer() {
 module.exports = {
   saveTranscript,
   startTranscriptServer,
-};
+  };
