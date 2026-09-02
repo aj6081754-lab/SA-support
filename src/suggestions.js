@@ -6,6 +6,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  MessageFlags,
 } = require("discord.js");
 
 const config = require("./config");
@@ -18,6 +19,20 @@ let suggestionCounter = 0;
 
 const pendingSuggestions = new Map();
 const suggestions = new Map();
+
+// ======================================================
+// EMOJIS
+// ======================================================
+
+const EMOJIS = {
+  suggestion: config.emojis.suggestion,
+
+  like: config.emojis.like,
+  dislike: config.emojis.dislike,
+
+  accept: "<a:aceptar:1544538371534102588>",
+  deny: "<a:denegar:1544535287143735406>",
+};
 
 // ======================================================
 // UTILIDADES
@@ -39,10 +54,6 @@ async function sendUserDM(user, message) {
   }
 }
 
-function getSuggestionEmoji() {
-  return config.emojis.suggestion;
-}
-
 // ======================================================
 // PANEL DE SUGERENCIAS
 // ======================================================
@@ -58,7 +69,6 @@ async function sendSuggestionsPanel(client) {
     );
   }
 
-  // Buscar un panel existente del bot
   const messages = await channel.messages.fetch({
     limit: 50,
   });
@@ -95,7 +105,7 @@ async function sendSuggestionsPanel(client) {
       .setCustomId("suggestion_create")
       .setLabel("Enviar sugerencia")
       .setStyle(ButtonStyle.Primary)
-      .setEmoji(config.emojis.suggestion)
+      .setEmoji(EMOJIS.suggestion)
   );
 
   return await channel.send({
@@ -105,7 +115,7 @@ async function sendSuggestionsPanel(client) {
 }
 
 // ======================================================
-// MODAL DE SUGERENCIA
+// MODAL
 // ======================================================
 
 async function showSuggestionModal(interaction) {
@@ -124,7 +134,9 @@ async function showSuggestionModal(interaction) {
     .setMaxLength(1000)
     .setRequired(true);
 
-  const row = new ActionRowBuilder().addComponents(input);
+  const row = new ActionRowBuilder().addComponents(
+    input
+  );
 
   modal.addComponents(row);
 
@@ -132,7 +144,7 @@ async function showSuggestionModal(interaction) {
 }
 
 // ======================================================
-// CONFIRMACIÓN DE SUGERENCIA
+// CONFIRMACIÓN
 // ======================================================
 
 async function handleSuggestionModal(interaction) {
@@ -152,43 +164,52 @@ async function handleSuggestionModal(interaction) {
   const embed = new EmbedBuilder()
     .setTitle("Confirmar sugerencia")
     .setDescription(
-      `${getSuggestionEmoji()} **¿Quieres enviar esta sugerencia?**\n\n` +
+      `${EMOJIS.suggestion} **¿Quieres enviar esta sugerencia?**\n\n` +
         `> ${suggestionText.replace(/\n/g, "\n> ")}`
     )
     .setColor(0xffd700);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`suggestion_confirm:${pendingId}`)
+      .setCustomId(
+        `suggestion_confirm:${pendingId}`
+      )
       .setLabel("Enviar")
       .setStyle(ButtonStyle.Success)
-      .setEmoji("✓"),
+      .setEmoji(EMOJIS.accept),
 
     new ButtonBuilder()
-      .setCustomId(`suggestion_cancel:${pendingId}`)
+      .setCustomId(
+        `suggestion_cancel:${pendingId}`
+      )
       .setLabel("Cancelar")
       .setStyle(ButtonStyle.Danger)
-      .setEmoji("✕")
+      .setEmoji(EMOJIS.deny)
   );
 
   await interaction.reply({
     embeds: [embed],
     components: [row],
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
 // ======================================================
-// ENVIAR SUGERENCIA A REVISIÓN INICIAL
+// ENVIAR A REVISIÓN INICIAL
 // ======================================================
 
-async function sendToInitialReview(interaction, pendingId) {
-  const pending = pendingSuggestions.get(pendingId);
+async function sendToInitialReview(
+  interaction,
+  pendingId
+) {
+  const pending = pendingSuggestions.get(
+    pendingId
+  );
 
   if (!pending) {
     await interaction.update({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya no está disponible.`,
+        `${EMOJIS.suggestion} Esta sugerencia ya no está disponible.`,
       embeds: [],
       components: [],
     });
@@ -206,8 +227,10 @@ async function sendToInitialReview(interaction, pendingId) {
 
   const suggestionData = {
     id: suggestionId,
+
     userId: interaction.user.id,
     username: interaction.user.tag,
+
     text: pending.text,
 
     status: "initial_review",
@@ -224,11 +247,15 @@ async function sendToInitialReview(interaction, pendingId) {
     createdAt: Date.now(),
   };
 
-  suggestions.set(suggestionId, suggestionData);
-
-  const reviewChannel = await interaction.client.channels.fetch(
-    config.channels.suggestionsReview
+  suggestions.set(
+    suggestionId,
+    suggestionData
   );
+
+  const reviewChannel =
+    await interaction.client.channels.fetch(
+      config.channels.suggestionsReview
+    );
 
   if (!reviewChannel) {
     throw new Error(
@@ -263,16 +290,20 @@ async function sendToInitialReview(interaction, pendingId) {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`suggestion_initial_accept:${suggestionId}`)
+      .setCustomId(
+        `suggestion_initial_accept:${suggestionId}`
+      )
       .setLabel("Aceptar")
       .setStyle(ButtonStyle.Success)
-      .setEmoji("✓"),
+      .setEmoji(EMOJIS.accept),
 
     new ButtonBuilder()
-      .setCustomId(`suggestion_initial_deny:${suggestionId}`)
+      .setCustomId(
+        `suggestion_initial_deny:${suggestionId}`
+      )
       .setLabel("Denegar")
       .setStyle(ButtonStyle.Danger)
-      .setEmoji("✕")
+      .setEmoji(EMOJIS.deny)
   );
 
   const message = await reviewChannel.send({
@@ -280,18 +311,19 @@ async function sendToInitialReview(interaction, pendingId) {
     components: [row],
   });
 
-  suggestionData.initialReviewMessageId = message.id;
+  suggestionData.initialReviewMessageId =
+    message.id;
 
   await interaction.update({
     content:
-      `${getSuggestionEmoji()} Tu sugerencia fue recibida y está en revisión.`,
+      `${EMOJIS.suggestion} Tu sugerencia fue recibida y está en revisión.`,
     embeds: [],
     components: [],
   });
 
   await sendUserDM(
     interaction.user,
-    `${getSuggestionEmoji()} Tu sugerencia fue recibida y está en revisión.`
+    `${EMOJIS.suggestion} Tu sugerencia fue recibida y está en revisión.`
   );
 }
 
@@ -303,13 +335,14 @@ async function acceptInitialSuggestion(
   interaction,
   suggestionId
 ) {
-  const suggestion = suggestions.get(suggestionId);
+  const suggestion =
+    suggestions.get(suggestionId);
 
   if (!suggestion) {
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya no está disponible.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} Esta sugerencia ya no está disponible.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return;
@@ -318,8 +351,8 @@ async function acceptInitialSuggestion(
   if (suggestion.status !== "initial_review") {
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya fue procesada.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} Esta sugerencia ya fue procesada.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return;
@@ -328,7 +361,7 @@ async function acceptInitialSuggestion(
   suggestion.status = "voting";
 
   // ------------------------------------------
-  // Actualizar revisión inicial
+  // ACTUALIZAR REVISIÓN INICIAL
   // ------------------------------------------
 
   const initialEmbed = new EmbedBuilder()
@@ -356,9 +389,10 @@ async function acceptInitialSuggestion(
     .setColor(0x57f287)
     .setTimestamp();
 
-  const initialMessage = await interaction.channel.messages.fetch(
-    suggestion.initialReviewMessageId
-  );
+  const initialMessage =
+    await interaction.channel.messages.fetch(
+      suggestion.initialReviewMessageId
+    );
 
   await initialMessage.edit({
     embeds: [initialEmbed],
@@ -366,12 +400,13 @@ async function acceptInitialSuggestion(
   });
 
   // ------------------------------------------
-  // Publicar inmediatamente en votación
+  // PUBLICAR EN VOTACIÓN
   // ------------------------------------------
 
-  const votingChannel = await interaction.client.channels.fetch(
-    config.channels.suggestions
-  );
+  const votingChannel =
+    await interaction.client.channels.fetch(
+      config.channels.suggestions
+    );
 
   if (!votingChannel) {
     throw new Error(
@@ -387,12 +422,12 @@ async function acceptInitialSuggestion(
     )
     .addFields(
       {
-        name: config.emojis.like,
+        name: EMOJIS.like,
         value: "0 votos",
         inline: true,
       },
       {
-        name: config.emojis.dislike,
+        name: EMOJIS.dislike,
         value: "0 votos",
         inline: true,
       }
@@ -403,50 +438,61 @@ async function acceptInitialSuggestion(
     .setColor(0xffd700)
     .setTimestamp();
 
-  const votingRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`suggestion_like:${suggestion.id}`)
-      .setLabel("Me gusta")
-      .setStyle(ButtonStyle.Success)
-      .setEmoji(config.emojis.like),
+  const votingRow =
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(
+          `suggestion_like:${suggestion.id}`
+        )
+        .setLabel("Me gusta")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji(EMOJIS.like),
 
-    new ButtonBuilder()
-      .setCustomId(`suggestion_dislike:${suggestion.id}`)
-      .setLabel("No me gusta")
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji(config.emojis.dislike)
+      new ButtonBuilder()
+        .setCustomId(
+          `suggestion_dislike:${suggestion.id}`
+        )
+        .setLabel("No me gusta")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji(EMOJIS.dislike)
+    );
+
+  const votingMessage =
+    await votingChannel.send({
+      embeds: [votingEmbed],
+      components: [votingRow],
+    });
+
+  suggestion.publicMessageId =
+    votingMessage.id;
+
+  // ------------------------------------------
+  // CREAR REVISIÓN FINAL INMEDIATAMENTE
+  // ------------------------------------------
+
+  await createFinalReview(
+    interaction.client,
+    suggestion
   );
 
-  const votingMessage = await votingChannel.send({
-    embeds: [votingEmbed],
-    components: [votingRow],
-  });
-
-  suggestion.publicMessageId = votingMessage.id;
-
   // ------------------------------------------
-  // Crear revisión FINAL inmediatamente
+  // AVISAR AL USUARIO
   // ------------------------------------------
 
-  await createFinalReview(interaction.client, suggestion);
-
-  // ------------------------------------------
-  // Avisar al usuario
-  // ------------------------------------------
-
-  const user = await interaction.client.users.fetch(
-    suggestion.userId
-  );
+  const user =
+    await interaction.client.users.fetch(
+      suggestion.userId
+    );
 
   await sendUserDM(
     user,
-    `${getSuggestionEmoji()} Tu sugerencia fue aceptada, pronto puede ser añadida.`
+    `${EMOJIS.suggestion} Tu sugerencia fue aceptada, pronto puede ser añadida.`
   );
 
   await interaction.reply({
     content:
-      `${getSuggestionEmoji()} La sugerencia fue aceptada y enviada inmediatamente al canal de votación.`,
-    ephemeral: true,
+      `${EMOJIS.suggestion} La sugerencia fue aceptada y enviada inmediatamente al canal de votación.`,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -454,10 +500,14 @@ async function acceptInitialSuggestion(
 // CREAR REVISIÓN FINAL
 // ======================================================
 
-async function createFinalReview(client, suggestion) {
-  const finalChannel = await client.channels.fetch(
-    config.channels.suggestionsFinal
-  );
+async function createFinalReview(
+  client,
+  suggestion
+) {
+  const finalChannel =
+    await client.channels.fetch(
+      config.channels.suggestionsFinal
+    );
 
   if (!finalChannel) {
     throw new Error(
@@ -465,44 +515,55 @@ async function createFinalReview(client, suggestion) {
     );
   }
 
-  const embed = createFinalReviewEmbed(suggestion);
+  const embed =
+    createFinalReviewEmbed(suggestion);
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(
-        `suggestion_final_accept:${suggestion.id}`
-      )
-      .setLabel("Aceptar sugerencia")
-      .setStyle(ButtonStyle.Success)
-      .setEmoji("✓"),
+  const row =
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(
+          `suggestion_final_accept:${suggestion.id}`
+        )
+        .setLabel("Aceptar sugerencia")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji(EMOJIS.accept),
 
-    new ButtonBuilder()
-      .setCustomId(
-        `suggestion_final_deny:${suggestion.id}`
-      )
-      .setLabel("Denegar sugerencia")
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji("✕")
-  );
+      new ButtonBuilder()
+        .setCustomId(
+          `suggestion_final_deny:${suggestion.id}`
+        )
+        .setLabel("Denegar sugerencia")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji(EMOJIS.deny)
+    );
 
-  const message = await finalChannel.send({
-    embeds: [embed],
-    components: [row],
-  });
+  const message =
+    await finalChannel.send({
+      embeds: [embed],
+      components: [row],
+    });
 
-  suggestion.finalReviewMessageId = message.id;
+  suggestion.finalReviewMessageId =
+    message.id;
 }
 
 // ======================================================
-// EMBED DE REVISIÓN FINAL
+// EMBED REVISIÓN FINAL
 // ======================================================
 
-function createFinalReviewEmbed(suggestion) {
-  const likes = suggestion.votes.like.size;
-  const dislikes = suggestion.votes.dislike.size;
+function createFinalReviewEmbed(
+  suggestion
+) {
+  const likes =
+    suggestion.votes.like.size;
+
+  const dislikes =
+    suggestion.votes.dislike.size;
 
   return new EmbedBuilder()
-    .setTitle("💡 Revisión final de sugerencia")
+    .setTitle(
+      "💡 Revisión final de sugerencia"
+    )
     .setDescription(
       `**Sugerencia:**\n${suggestion.text}`
     )
@@ -523,12 +584,12 @@ function createFinalReviewEmbed(suggestion) {
         inline: true,
       },
       {
-        name: config.emojis.like,
+        name: EMOJIS.like,
         value: `${likes} votos`,
         inline: true,
       },
       {
-        name: config.emojis.dislike,
+        name: EMOJIS.dislike,
         value: `${dislikes} votos`,
         inline: true,
       },
@@ -551,13 +612,14 @@ async function vote(
   suggestionId,
   type
 ) {
-  const suggestion = suggestions.get(suggestionId);
+  const suggestion =
+    suggestions.get(suggestionId);
 
   if (!suggestion) {
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya no está disponible.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} Esta sugerencia ya no está disponible.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return;
@@ -566,14 +628,15 @@ async function vote(
   if (suggestion.status !== "voting") {
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya no está disponible para votar.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} Esta sugerencia ya no está disponible para votar.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return;
   }
 
-  const userId = interaction.user.id;
+  const userId =
+    interaction.user.id;
 
   // Quitar voto anterior
   suggestion.votes.like.delete(userId);
@@ -586,31 +649,45 @@ async function vote(
     suggestion.votes.dislike.add(userId);
   }
 
-  await updateVotingMessage(interaction.client, suggestion);
-  await updateFinalReview(interaction.client, suggestion);
+  await updateVotingMessage(
+    interaction.client,
+    suggestion
+  );
+
+  await updateFinalReview(
+    interaction.client,
+    suggestion
+  );
 
   await interaction.reply({
     content:
-      `${getSuggestionEmoji()} Tu voto fue registrado correctamente.`,
-    ephemeral: true,
+      `${EMOJIS.suggestion} Tu voto fue registrado correctamente.`,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
 // ======================================================
-// ACTUALIZAR MENSAJE PÚBLICO DE VOTACIÓN
+// ACTUALIZAR VOTACIÓN
 // ======================================================
 
-async function updateVotingMessage(client, suggestion) {
-  if (!suggestion.publicMessageId) return;
+async function updateVotingMessage(
+  client,
+  suggestion
+) {
+  if (!suggestion.publicMessageId) {
+    return;
+  }
 
   try {
-    const channel = await client.channels.fetch(
-      config.channels.suggestions
-    );
+    const channel =
+      await client.channels.fetch(
+        config.channels.suggestions
+      );
 
-    const message = await channel.messages.fetch(
-      suggestion.publicMessageId
-    );
+    const message =
+      await channel.messages.fetch(
+        suggestion.publicMessageId
+      );
 
     const embed = new EmbedBuilder()
       .setTitle("💡 Nueva sugerencia")
@@ -620,12 +697,12 @@ async function updateVotingMessage(client, suggestion) {
       )
       .addFields(
         {
-          name: config.emojis.like,
+          name: EMOJIS.like,
           value: `${suggestion.votes.like.size} votos`,
           inline: true,
         },
         {
-          name: config.emojis.dislike,
+          name: EMOJIS.dislike,
           value: `${suggestion.votes.dislike.size} votos`,
           inline: true,
         }
@@ -636,23 +713,24 @@ async function updateVotingMessage(client, suggestion) {
       .setColor(0xffd700)
       .setTimestamp();
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(
-          `suggestion_like:${suggestion.id}`
-        )
-        .setLabel("Me gusta")
-        .setStyle(ButtonStyle.Success)
-        .setEmoji(config.emojis.like),
+    const row =
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            `suggestion_like:${suggestion.id}`
+          )
+          .setLabel("Me gusta")
+          .setStyle(ButtonStyle.Success)
+          .setEmoji(EMOJIS.like),
 
-      new ButtonBuilder()
-        .setCustomId(
-          `suggestion_dislike:${suggestion.id}`
-        )
-        .setLabel("No me gusta")
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji(config.emojis.dislike)
-    );
+        new ButtonBuilder()
+          .setCustomId(
+            `suggestion_dislike:${suggestion.id}`
+          )
+          .setLabel("No me gusta")
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji(EMOJIS.dislike)
+      );
 
     await message.edit({
       embeds: [embed],
@@ -670,37 +748,48 @@ async function updateVotingMessage(client, suggestion) {
 // ACTUALIZAR REVISIÓN FINAL
 // ======================================================
 
-async function updateFinalReview(client, suggestion) {
-  if (!suggestion.finalReviewMessageId) return;
+async function updateFinalReview(
+  client,
+  suggestion
+) {
+  if (!suggestion.finalReviewMessageId) {
+    return;
+  }
 
   try {
-    const channel = await client.channels.fetch(
-      config.channels.suggestionsFinal
-    );
+    const channel =
+      await client.channels.fetch(
+        config.channels.suggestionsFinal
+      );
 
-    const message = await channel.messages.fetch(
-      suggestion.finalReviewMessageId
-    );
+    const message =
+      await channel.messages.fetch(
+        suggestion.finalReviewMessageId
+      );
 
-    const embed = createFinalReviewEmbed(suggestion);
+    const embed =
+      createFinalReviewEmbed(
+        suggestion
+      );
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(
-          `suggestion_final_accept:${suggestion.id}`
-        )
-        .setLabel("Aceptar sugerencia")
-        .setStyle(ButtonStyle.Success)
-        .setEmoji("✓"),
+    const row =
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            `suggestion_final_accept:${suggestion.id}`
+          )
+          .setLabel("Aceptar sugerencia")
+          .setStyle(ButtonStyle.Success)
+          .setEmoji(EMOJIS.accept),
 
-      new ButtonBuilder()
-        .setCustomId(
-          `suggestion_final_deny:${suggestion.id}`
-        )
-        .setLabel("Denegar sugerencia")
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji("✕")
-    );
+        new ButtonBuilder()
+          .setCustomId(
+            `suggestion_final_deny:${suggestion.id}`
+          )
+          .setLabel("Denegar sugerencia")
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji(EMOJIS.deny)
+      );
 
     await message.edit({
       embeds: [embed],
@@ -723,13 +812,14 @@ async function finalDecision(
   suggestionId,
   accepted
 ) {
-  const suggestion = suggestions.get(suggestionId);
+  const suggestion =
+    suggestions.get(suggestionId);
 
   if (!suggestion) {
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya no está disponible.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} Esta sugerencia ya no está disponible.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return;
@@ -738,65 +828,67 @@ async function finalDecision(
   if (suggestion.status !== "voting") {
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya fue procesada.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} Esta sugerencia ya fue procesada.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return;
   }
 
-  suggestion.status = accepted
-    ? "accepted"
-    : "denied";
+  suggestion.status =
+    accepted
+      ? "accepted"
+      : "denied";
 
   // ------------------------------------------
-  // Actualizar revisión final
+  // ACTUALIZAR REVISIÓN FINAL
   // ------------------------------------------
 
-  const finalEmbed = new EmbedBuilder()
-    .setTitle(
-      accepted
-        ? "💡 Sugerencia aceptada"
-        : "💡 Sugerencia denegada"
-    )
-    .setDescription(
-      `**Sugerencia:**\n${suggestion.text}`
-    )
-    .addFields(
-      {
-        name: "👤 Usuario",
-        value: `<@${suggestion.userId}>`,
-        inline: true,
-      },
-      {
-        name: "🆔 ID",
-        value: `\`${suggestion.id}\``,
-        inline: true,
-      },
-      {
-        name: "📊 Estado",
-        value: accepted
-          ? "Aceptada"
-          : "Denegada",
-        inline: true,
-      },
-      {
-        name: config.emojis.like,
-        value: `${suggestion.votes.like.size} votos`,
-        inline: true,
-      },
-      {
-        name: config.emojis.dislike,
-        value: `${suggestion.votes.dislike.size} votos`,
-        inline: true,
-      }
-    )
-    .setColor(
-      accepted
-        ? 0x57f287
-        : 0xed4245
-    )
-    .setTimestamp();
+  const finalEmbed =
+    new EmbedBuilder()
+      .setTitle(
+        accepted
+          ? "💡 Sugerencia aceptada"
+          : "💡 Sugerencia denegada"
+      )
+      .setDescription(
+        `**Sugerencia:**\n${suggestion.text}`
+      )
+      .addFields(
+        {
+          name: "👤 Usuario",
+          value: `<@${suggestion.userId}>`,
+          inline: true,
+        },
+        {
+          name: "🆔 ID",
+          value: `\`${suggestion.id}\``,
+          inline: true,
+        },
+        {
+          name: "📊 Estado",
+          value: accepted
+            ? "Aceptada"
+            : "Denegada",
+          inline: true,
+        },
+        {
+          name: EMOJIS.like,
+          value: `${suggestion.votes.like.size} votos`,
+          inline: true,
+        },
+        {
+          name: EMOJIS.dislike,
+          value: `${suggestion.votes.dislike.size} votos`,
+          inline: true,
+        }
+      )
+      .setColor(
+        accepted
+          ? 0x57f287
+          : 0xed4245
+      )
+      .setTimestamp();
 
   const finalMessage =
     await interaction.channel.messages.fetch(
@@ -809,7 +901,7 @@ async function finalDecision(
   });
 
   // ------------------------------------------
-  // Desactivar votación pública
+  // DESACTIVAR VOTACIÓN
   // ------------------------------------------
 
   await disableVotingMessage(
@@ -818,30 +910,27 @@ async function finalDecision(
   );
 
   // ------------------------------------------
-  // Avisar al usuario
+  // AVISAR AL USUARIO
   // ------------------------------------------
 
-  const user = await interaction.client.users.fetch(
-    suggestion.userId
+  const user =
+    await interaction.client.users.fetch(
+      suggestion.userId
+    );
+
+  await sendUserDM(
+    user,
+    accepted
+      ? `${EMOJIS.suggestion} Tu sugerencia fue aceptada, pronto puede ser añadida.`
+      : `${EMOJIS.suggestion} Tu sugerencia fue denegada.`
   );
 
-  if (accepted) {
-    await sendUserDM(
-      user,
-      `${getSuggestionEmoji()} Tu sugerencia fue aceptada, pronto puede ser añadida.`
-    );
-  } else {
-    await sendUserDM(
-      user,
-      `${getSuggestionEmoji()} Tu sugerencia fue denegada.`
-    );
-  }
-
   await interaction.reply({
-    content: accepted
-      ? `${getSuggestionEmoji()} La sugerencia fue aceptada definitivamente.`
-      : `${getSuggestionEmoji()} La sugerencia fue denegada definitivamente.`,
-    ephemeral: true,
+    content:
+      accepted
+        ? `${EMOJIS.suggestion} La sugerencia fue aceptada definitivamente.`
+        : `${EMOJIS.suggestion} La sugerencia fue denegada definitivamente.`,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -853,58 +942,63 @@ async function disableVotingMessage(
   client,
   suggestion
 ) {
-  if (!suggestion.publicMessageId) return;
+  if (!suggestion.publicMessageId) {
+    return;
+  }
 
   try {
-    const channel = await client.channels.fetch(
-      config.channels.suggestions
-    );
+    const channel =
+      await client.channels.fetch(
+        config.channels.suggestions
+      );
 
-    const message = await channel.messages.fetch(
-      suggestion.publicMessageId
-    );
+    const message =
+      await channel.messages.fetch(
+        suggestion.publicMessageId
+      );
 
     const accepted =
       suggestion.status === "accepted";
 
-    const embed = new EmbedBuilder()
-      .setTitle(
-        accepted
-          ? "💡 Sugerencia aceptada"
-          : "💡 Sugerencia denegada"
-      )
-      .setDescription(
-        `${suggestion.text}\n\n` +
-          `Sugerencia enviada por <@${suggestion.userId}>`
-      )
-      .addFields(
-        {
-          name: config.emojis.like,
-          value: `${suggestion.votes.like.size} votos`,
-          inline: true,
-        },
-        {
-          name: config.emojis.dislike,
-          value: `${suggestion.votes.dislike.size} votos`,
-          inline: true,
-        },
-        {
-          name: "📊 Estado",
-          value: accepted
-            ? "Aceptada"
-            : "Denegada",
-          inline: true,
-        }
-      )
-      .setFooter({
-        text: `ID: ${suggestion.id}`,
-      })
-      .setColor(
-        accepted
-          ? 0x57f287
-          : 0xed4245
-      )
-      .setTimestamp();
+    const embed =
+      new EmbedBuilder()
+        .setTitle(
+          accepted
+            ? "💡 Sugerencia aceptada"
+            : "💡 Sugerencia denegada"
+        )
+        .setDescription(
+          `${suggestion.text}\n\n` +
+            `Sugerencia enviada por <@${suggestion.userId}>`
+        )
+        .addFields(
+          {
+            name: EMOJIS.like,
+            value: `${suggestion.votes.like.size} votos`,
+            inline: true,
+          },
+          {
+            name: EMOJIS.dislike,
+            value: `${suggestion.votes.dislike.size} votos`,
+            inline: true,
+          },
+          {
+            name: "📊 Estado",
+            value: accepted
+              ? "Aceptada"
+              : "Denegada",
+            inline: true,
+          }
+        )
+        .setFooter({
+          text: `ID: ${suggestion.id}`,
+        })
+        .setColor(
+          accepted
+            ? 0x57f287
+            : 0xed4245
+        )
+        .setTimestamp();
 
     await message.edit({
       embeds: [embed],
@@ -919,21 +1013,22 @@ async function disableVotingMessage(
 }
 
 // ======================================================
-// CANCELAR CONFIRMACIÓN
+// CANCELAR
 // ======================================================
 
 async function cancelSuggestion(
   interaction,
   pendingId
 ) {
-  const pending = pendingSuggestions.get(
-    pendingId
-  );
+  const pending =
+    pendingSuggestions.get(
+      pendingId
+    );
 
   if (!pending) {
     await interaction.update({
       content:
-        `${getSuggestionEmoji()} Esta sugerencia ya no está disponible.`,
+        `${EMOJIS.suggestion} Esta sugerencia ya no está disponible.`,
       embeds: [],
       components: [],
     });
@@ -941,15 +1036,20 @@ async function cancelSuggestion(
     return;
   }
 
-  if (pending.userId !== interaction.user.id) {
+  if (
+    pending.userId !==
+    interaction.user.id
+  ) {
     return;
   }
 
-  pendingSuggestions.delete(pendingId);
+  pendingSuggestions.delete(
+    pendingId
+  );
 
   await interaction.update({
     content:
-      `${getSuggestionEmoji()} Tu sugerencia fue cancelada.`,
+      `${EMOJIS.suggestion} Tu sugerencia fue cancelada.`,
     embeds: [],
     components: [],
   });
@@ -963,31 +1063,39 @@ async function handleSuggestionInteraction(
   interaction
 ) {
   // ------------------------------------------
-  // Botón: abrir modal
+  // ABRIR MODAL
   // ------------------------------------------
 
   if (
     interaction.isButton() &&
-    interaction.customId === "suggestion_create"
+    interaction.customId ===
+      "suggestion_create"
   ) {
-    await showSuggestionModal(interaction);
+    await showSuggestionModal(
+      interaction
+    );
+
     return true;
   }
 
   // ------------------------------------------
-  // Modal
+  // MODAL
   // ------------------------------------------
 
   if (
     interaction.isModalSubmit() &&
-    interaction.customId === "suggestion_modal"
+    interaction.customId ===
+      "suggestion_modal"
   ) {
-    await handleSuggestionModal(interaction);
+    await handleSuggestionModal(
+      interaction
+    );
+
     return true;
   }
 
   // ------------------------------------------
-  // Confirmar
+  // CONFIRMAR
   // ------------------------------------------
 
   if (
@@ -1008,7 +1116,7 @@ async function handleSuggestionInteraction(
   }
 
   // ------------------------------------------
-  // Cancelar
+  // CANCELAR
   // ------------------------------------------
 
   if (
@@ -1029,7 +1137,7 @@ async function handleSuggestionInteraction(
   }
 
   // ------------------------------------------
-  // Aceptar revisión inicial
+  // ACEPTAR REVISIÓN INICIAL
   // ------------------------------------------
 
   if (
@@ -1050,7 +1158,7 @@ async function handleSuggestionInteraction(
   }
 
   // ------------------------------------------
-  // Denegar revisión inicial
+  // DENEGAR REVISIÓN INICIAL
   // ------------------------------------------
 
   if (
@@ -1063,23 +1171,28 @@ async function handleSuggestionInteraction(
       interaction.customId.split(":")[1];
 
     const suggestion =
-      suggestions.get(suggestionId);
+      suggestions.get(
+        suggestionId
+      );
 
     if (!suggestion) {
       await interaction.reply({
         content:
-          `${getSuggestionEmoji()} Esta sugerencia ya no está disponible.`,
-        ephemeral: true,
+          `${EMOJIS.suggestion} Esta sugerencia ya no está disponible.`,
+        flags: MessageFlags.Ephemeral,
       });
 
       return true;
     }
 
-    if (suggestion.status !== "initial_review") {
+    if (
+      suggestion.status !==
+      "initial_review"
+    ) {
       await interaction.reply({
         content:
-          `${getSuggestionEmoji()} Esta sugerencia ya fue procesada.`,
-        ephemeral: true,
+          `${EMOJIS.suggestion} Esta sugerencia ya fue procesada.`,
+        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -1087,30 +1200,33 @@ async function handleSuggestionInteraction(
 
     suggestion.status = "denied";
 
-    const embed = new EmbedBuilder()
-      .setTitle("💡 Sugerencia denegada")
-      .setDescription(
-        `**Sugerencia:**\n${suggestion.text}`
-      )
-      .addFields(
-        {
-          name: "👤 Usuario",
-          value: `<@${suggestion.userId}>`,
-          inline: true,
-        },
-        {
-          name: "🆔 ID",
-          value: `\`${suggestion.id}\``,
-          inline: true,
-        },
-        {
-          name: "📊 Estado",
-          value: "Denegada",
-          inline: true,
-        }
-      )
-      .setColor(0xed4245)
-      .setTimestamp();
+    const embed =
+      new EmbedBuilder()
+        .setTitle(
+          "💡 Sugerencia denegada"
+        )
+        .setDescription(
+          `**Sugerencia:**\n${suggestion.text}`
+        )
+        .addFields(
+          {
+            name: "👤 Usuario",
+            value: `<@${suggestion.userId}>`,
+            inline: true,
+          },
+          {
+            name: "🆔 ID",
+            value: `\`${suggestion.id}\``,
+            inline: true,
+          },
+          {
+            name: "📊 Estado",
+            value: "Denegada",
+            inline: true,
+          }
+        )
+        .setColor(0xed4245)
+        .setTimestamp();
 
     const message =
       await interaction.channel.messages.fetch(
@@ -1129,20 +1245,20 @@ async function handleSuggestionInteraction(
 
     await sendUserDM(
       user,
-      `${getSuggestionEmoji()} Tu sugerencia fue denegada.`
+      `${EMOJIS.suggestion} Tu sugerencia fue denegada.`
     );
 
     await interaction.reply({
       content:
-        `${getSuggestionEmoji()} La sugerencia fue denegada.`,
-      ephemeral: true,
+        `${EMOJIS.suggestion} La sugerencia fue denegada.`,
+      flags: MessageFlags.Ephemeral,
     });
 
     return true;
   }
 
   // ------------------------------------------
-  // Like
+  // LIKE
   // ------------------------------------------
 
   if (
@@ -1164,7 +1280,7 @@ async function handleSuggestionInteraction(
   }
 
   // ------------------------------------------
-  // Dislike
+  // DISLIKE
   // ------------------------------------------
 
   if (
@@ -1186,7 +1302,7 @@ async function handleSuggestionInteraction(
   }
 
   // ------------------------------------------
-  // Aceptar revisión final
+  // ACEPTAR FINAL
   // ------------------------------------------
 
   if (
@@ -1208,7 +1324,7 @@ async function handleSuggestionInteraction(
   }
 
   // ------------------------------------------
-  // Denegar revisión final
+  // DENEGAR FINAL
   // ------------------------------------------
 
   if (
