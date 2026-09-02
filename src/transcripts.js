@@ -8,21 +8,31 @@ const app = express();
 // CONFIGURACIÓN
 // ==================================================
 
-const TRANSCRIPTS_DIR = "/data/transcripts";
+const DATA_DIR = "/data";
+const TRANSCRIPTS_DIR = path.join(
+  DATA_DIR,
+  "transcripts"
+);
 
-// Crear carpeta si no existe
-if (!fs.existsSync(TRANSCRIPTS_DIR)) {
-  fs.mkdirSync(TRANSCRIPTS_DIR, {
-    recursive: true,
-  });
-}
+const ASSETS_DIR = path.join(
+  DATA_DIR,
+  "transcript-assets"
+);
+
+fs.mkdirSync(TRANSCRIPTS_DIR, {
+  recursive: true,
+});
+
+fs.mkdirSync(ASSETS_DIR, {
+  recursive: true,
+});
 
 // ==================================================
-// SEGURIDAD
+// UTILIDADES
 // ==================================================
 
 function escapeHTML(text) {
-  return String(text)
+  return String(text ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -30,279 +40,535 @@ function escapeHTML(text) {
     .replace(/'/g, "&#039;");
 }
 
-// ==================================================
-// CONVERTIR LINKS EN LINKS CLICKEABLES
-// ==================================================
+function safeFileName(name) {
+  return String(name || "file")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 150);
+}
 
-function formatMessageContent(text) {
-  const escaped = escapeHTML(text);
-
-  return escaped.replace(
-    /(https?:\/\/[^\s<]+)/gi,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+function safeId(id) {
+  return String(id || "").replace(
+    /[^a-zA-Z0-9_-]/g,
+    ""
   );
 }
 
 // ==================================================
-// CREAR TRANSCRIPCIÓN
+// MENCIONES
 // ==================================================
 
-function createTranscript(ticket, messages) {
-  const messageList = messages
-    .sort(
-      (a, b) =>
-        a.createdTimestamp -
-        b.createdTimestamp
-    );
+function formatMentions(
+  content,
+  guild
+) {
+  if (!content) {
+    return "";
+  }
 
-  const messageHTML = messageList
-    .map((message) => {
-      const username =
-        escapeHTML(
-          message.member?.displayName ||
-            message.author?.username ||
-            "Usuario"
+  let text = escapeHTML(content);
+
+  // @everyone
+  text = text.replace(
+    /@everyone/g,
+    `<span class="mention">@everyone</span>`
+  );
+
+  // @here
+  text = text.replace(
+    /@here/g,
+    `<span class="mention">@here</span>`
+  );
+
+  // Usuarios
+  text = text.replace(
+    /&lt;@!?(\d+)&gt;/g,
+    (match, userId) => {
+      const member =
+        guild?.members?.cache?.get(
+          userId
         );
 
-      const avatar =
-        message.author?.displayAvatarURL
-          ? message.author.displayAvatarURL({
-              extension: "png",
-              size: 128,
-            })
-          : "";
-
-      const content =
-        formatMessageContent(
-          message.content ||
-            "[Sin contenido]"
+      const user =
+        member?.user ||
+        guild?.client?.users?.cache?.get(
+          userId
         );
 
-      const timestamp =
-        new Date(
-          message.createdTimestamp
-        ).toLocaleString("es-MX", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        });
-
-      // ==========================================
-      // ARCHIVOS / ADJUNTOS
-      // ==========================================
-
-      let attachmentsHTML = "";
-
-      if (
-        message.attachments &&
-        message.attachments.size > 0
-      ) {
-        attachmentsHTML = `
-          <div class="attachments">
-            ${Array.from(
-              message.attachments.values()
-            )
-              .map((attachment) => {
-                const url =
-                  escapeHTML(
-                    attachment.url
-                  );
-
-                const name =
-                  escapeHTML(
-                    attachment.name ||
-                      "Archivo"
-                  );
-
-                const contentType =
-                  attachment.contentType ||
-                  "";
-
-                if (
-                  contentType.startsWith(
-                    "image/"
-                  )
-                ) {
-                  return `
-                    <div class="attachment image-attachment">
-                      <a
-                        href="${url}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <img
-                          src="${url}"
-                          alt="${name}"
-                        >
-                      </a>
-                    </div>
-                  `;
-                }
-
-                return `
-                  <div class="attachment-file">
-                    📎
-                    <a
-                      href="${url}"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      ${name}
-                    </a>
-                  </div>
-                `;
-              })
-              .join("")}
-          </div>
-        `;
-      }
-
-      // ==========================================
-      // EMBEDS
-      // ==========================================
-
-      let embedsHTML = "";
-
-      if (
-        message.embeds &&
-        message.embeds.length > 0
-      ) {
-        embedsHTML = `
-          <div class="embeds">
-            ${message.embeds
-              .map((embed) => {
-                const title =
-                  escapeHTML(
-                    embed.title ||
-                      ""
-                  );
-
-                const description =
-                  formatMessageContent(
-                    embed.description ||
-                      ""
-                  );
-
-                const url =
-                  embed.url
-                    ? escapeHTML(
-                        embed.url
-                      )
-                    : "";
-
-                const image =
-                  embed.image?.url
-                    ? escapeHTML(
-                        embed.image.url
-                      )
-                    : "";
-
-                return `
-                  <div class="embed">
-
-                    ${
-                      title
-                        ? `
-                          <div class="embed-title">
-                            ${
-                              url
-                                ? `
-                                  <a
-                                    href="${url}"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    ${title}
-                                  </a>
-                                `
-                                : title
-                            }
-                          </div>
-                        `
-                        : ""
-                    }
-
-                    ${
-                      description
-                        ? `
-                          <div class="embed-description">
-                            ${description}
-                          </div>
-                        `
-                        : ""
-                    }
-
-                    ${
-                      image
-                        ? `
-                          <img
-                            class="embed-image"
-                            src="${image}"
-                            alt="Embed image"
-                          >
-                        `
-                        : ""
-                    }
-
-                  </div>
-                `;
-              })
-              .join("")}
-          </div>
-        `;
-      }
+      const name =
+        member?.displayName ||
+        user?.username ||
+        userId;
 
       return `
-        <div class="message">
-
-          ${
-            avatar
-              ? `
-                <img
-                  class="avatar"
-                  src="${avatar}"
-                  alt="Avatar"
-                >
-              `
-              : `
-                <div class="avatar placeholder">
-                  ?
-                </div>
-              `
-          }
-
-          <div class="message-content">
-
-            <div class="message-header">
-
-              <span class="username">
-                ${username}
-              </span>
-
-              <span class="timestamp">
-                ${timestamp}
-              </span>
-
-            </div>
-
-            <div class="content">
-              ${content}
-            </div>
-
-            ${attachmentsHTML}
-
-            ${embedsHTML}
-
-          </div>
-
-        </div>
+        <span
+          class="mention"
+          title="${escapeHTML(userId)}"
+        >
+          @${escapeHTML(name)}
+        </span>
       `;
-    })
-    .join("");
+    }
+  );
 
-  // ==================================================
-  // INFORMACIÓN DEL TICKET
-  // ==================================================
+  // Roles
+  text = text.replace(
+    /&lt;@&amp;(\d+)&gt;/g,
+    (match, roleId) => {
+      const role =
+        guild?.roles?.cache?.get(
+          roleId
+        );
 
+      const name =
+        role?.name ||
+        roleId;
+
+      return `
+        <span
+          class="mention"
+          title="${escapeHTML(roleId)}"
+        >
+          @${escapeHTML(name)}
+        </span>
+      `;
+    }
+  );
+
+  // Canales
+  text = text.replace(
+    /&lt;#(\d+)&gt;/g,
+    (match, channelId) => {
+      const channel =
+        guild?.channels?.cache?.get(
+          channelId
+        );
+
+      const name =
+        channel?.name ||
+        channelId;
+
+      return `
+        <span
+          class="channel-mention"
+          title="${escapeHTML(channelId)}"
+        >
+          #${escapeHTML(name)}
+        </span>
+      `;
+    }
+  );
+
+  return text;
+}
+
+// ==================================================
+// EMOJIS PERSONALIZADOS
+// ==================================================
+
+function formatCustomEmojis(
+  content
+) {
+  if (!content) {
+    return "";
+  }
+
+  return content.replace(
+    /&lt;(a?):([a-zA-Z0-9_]+):(\d+)&gt;/g,
+    (match, animated, name, id) => {
+      const extension =
+        animated === "a"
+          ? "gif"
+          : "png";
+
+      const url =
+        `https://cdn.discordapp.com/emojis/${id}.${extension}?size=32`;
+
+      return `
+        <img
+          class="custom-emoji"
+          src="${url}"
+          alt=":${escapeHTML(name)}:"
+          title=":${escapeHTML(name)}:"
+        >
+      `;
+    }
+  );
+}
+
+// ==================================================
+// CONTENIDO DEL MENSAJE
+// ==================================================
+
+function formatContent(
+  content,
+  guild
+) {
+  if (!content) {
+    return "";
+  }
+
+  let result =
+    formatMentions(
+      content,
+      guild
+    );
+
+  // Links
+  result = result.replace(
+    /(?<!["'=])(https?:\/\/[^\s<]+)/gi,
+    (url) => {
+      const cleanUrl =
+        url.replace(
+          /[),.!?]+$/g,
+          ""
+        );
+
+      return `
+        <a
+          href="${cleanUrl}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          ${cleanUrl}
+        </a>
+      `;
+    }
+  );
+
+  result =
+    formatCustomEmojis(
+      result
+    );
+
+  return result;
+}
+
+// ==================================================
+// DESCARGAR ARCHIVO
+// ==================================================
+
+async function downloadFile(
+  url,
+  destination
+) {
+  try {
+    const response =
+      await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+    }
+
+    const buffer =
+      Buffer.from(
+        await response.arrayBuffer()
+      );
+
+    fs.writeFileSync(
+      destination,
+      buffer
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "❌ Error descargando archivo:",
+      error
+    );
+
+    return false;
+  }
+}
+
+// ==================================================
+// GUARDAR ADJUNTOS
+// ==================================================
+
+async function saveAttachment(
+  attachment,
+  ticketId,
+  index
+) {
+  const ticketDir =
+    path.join(
+      ASSETS_DIR,
+      safeId(ticketId)
+    );
+
+  fs.mkdirSync(
+    ticketDir,
+    {
+      recursive: true,
+    }
+  );
+
+  const originalName =
+    safeFileName(
+      attachment.name ||
+        `file-${index}`
+    );
+
+  const fileName =
+    `${index}-${originalName}`;
+
+  const filePath =
+    path.join(
+      ticketDir,
+      fileName
+    );
+
+  const success =
+    await downloadFile(
+      attachment.url,
+      filePath
+    );
+
+  if (!success) {
+    return {
+      type: "link",
+      url: attachment.url,
+      name:
+        attachment.name ||
+        "Archivo",
+    };
+  }
+
+  return {
+    type:
+      attachment.contentType?.startsWith(
+        "image/"
+      )
+        ? "image"
+        : "file",
+
+    file:
+      `/transcript-assets/${safeId(
+        ticketId
+      )}/${encodeURIComponent(
+        fileName
+      )}`,
+
+    name:
+      attachment.name ||
+      fileName,
+
+    contentType:
+      attachment.contentType ||
+      "",
+  };
+}
+
+// ==================================================
+// GUARDAR DATOS DE MENSAJES
+// ==================================================
+
+async function prepareMessages(
+  messages,
+  ticket,
+  guild
+) {
+  const result = [];
+
+  let attachmentIndex = 0;
+
+  for (
+    const message of messages
+  ) {
+    const attachments = [];
+
+    if (
+      message.attachments &&
+      message.attachments.size > 0
+    ) {
+      for (
+        const attachment of message.attachments.values()
+      ) {
+        attachmentIndex++;
+
+        const saved =
+          await saveAttachment(
+            attachment,
+            ticket.id,
+            attachmentIndex
+          );
+
+        attachments.push(
+          saved
+        );
+      }
+    }
+
+    const embeds =
+      [];
+
+    if (
+      message.embeds &&
+      message.embeds.length > 0
+    ) {
+      for (
+        const embed of message.embeds
+      ) {
+        let image = null;
+
+        if (
+          embed.image?.url
+        ) {
+          image =
+            embed.image.url;
+        }
+
+        let thumbnail = null;
+
+        if (
+          embed.thumbnail?.url
+        ) {
+          thumbnail =
+            embed.thumbnail.url;
+        }
+
+        embeds.push({
+          title:
+            embed.title ||
+            "",
+
+          description:
+            embed.description ||
+            "",
+
+          url:
+            embed.url ||
+            null,
+
+          image,
+
+          thumbnail,
+
+          color:
+            embed.color ||
+            null,
+        });
+      }
+    }
+
+    let sticker = null;
+
+    if (
+      message.stickers &&
+      message.stickers.size > 0
+    ) {
+      const firstSticker =
+        message.stickers.first();
+
+      if (firstSticker) {
+        sticker = {
+          name:
+            firstSticker.name ||
+            "Sticker",
+
+          url:
+            firstSticker.url ||
+            null,
+        };
+      }
+    }
+
+    let reply = null;
+
+    if (
+      message.reference?.messageId
+    ) {
+      const referenced =
+        messages.find(
+          (item) =>
+            item.id ===
+            message.reference
+              .messageId
+        );
+
+      if (referenced) {
+        reply = {
+          author:
+            referenced.member
+              ?.displayName ||
+            referenced.author
+              ?.username ||
+            "Usuario",
+
+          content:
+            referenced.content ||
+            "[Sin contenido]",
+        };
+      }
+    }
+
+    const author =
+      message.member
+        ?.displayName ||
+      message.author
+        ?.username ||
+      "Usuario";
+
+    const avatar =
+      message.author?.displayAvatarURL
+        ? message.author.displayAvatarURL({
+            extension: "png",
+            size: 128,
+          })
+        : null;
+
+    result.push({
+      id:
+        message.id,
+
+      author,
+
+      authorId:
+        message.author?.id ||
+        null,
+
+      avatar,
+
+      content:
+        message.content ||
+        "",
+
+      createdTimestamp:
+        message.createdTimestamp,
+
+      bot:
+        Boolean(
+          message.author?.bot
+        ),
+
+      attachments,
+
+      embeds,
+
+      sticker,
+
+      reply,
+
+      guildId:
+        guild?.id ||
+        null,
+    });
+  }
+
+  return result;
+}
+
+// ==================================================
+// CREAR HTML
+// ==================================================
+
+function createTranscriptHTML(
+  ticket,
+  preparedMessages,
+  threads,
+  guild
+) {
   const category =
     String(
       ticket.type ||
@@ -326,19 +592,410 @@ function createTranscript(ticket, messages) {
     ticket.createdAt
       ? new Date(
           ticket.createdAt
-        ).toLocaleString(
+        ).toLocaleDateString(
           "es-MX",
           {
             dateStyle:
               "medium",
-            timeStyle:
-              "short",
           }
         )
       : "Desconocido";
 
+  const user =
+    guild?.members?.cache?.get(
+      ticket.userId
+    );
+
+  const userName =
+    user?.displayName ||
+    user?.user?.username ||
+    ticket.userId ||
+    "Desconocido";
+
   // ==================================================
-  // HTML
+  // MENSAJES
+  // ==================================================
+
+  const messagesHTML =
+    preparedMessages
+      .map(
+        (message) => {
+          const content =
+            formatContent(
+              message.content,
+              guild
+            );
+
+          const replyHTML =
+            message.reply
+              ? `
+                <div class="reply">
+                  <div class="reply-line"></div>
+
+                  <div class="reply-content">
+                    <div class="reply-author">
+                      ${escapeHTML(
+                        message.reply.author
+                      )}
+                    </div>
+
+                    <div class="reply-text">
+                      ${formatContent(
+                        message.reply.content,
+                        guild
+                      )}
+                    </div>
+                  </div>
+                </div>
+              `
+              : "";
+
+          const attachmentsHTML =
+            message.attachments
+              .map(
+                (attachment) => {
+                  if (
+                    attachment.type ===
+                    "image"
+                  ) {
+                    return `
+                      <div class="attachment">
+                        <a
+                          href="${attachment.file}"
+                          target="_blank"
+                        >
+                          <img
+                            class="attachment-image"
+                            src="${attachment.file}"
+                            alt="${escapeHTML(
+                              attachment.name
+                            )}"
+                          >
+                        </a>
+                      </div>
+                    `;
+                  }
+
+                  return `
+                    <div class="file">
+                      <span class="file-icon">
+                        📎
+                      </span>
+
+                      <a
+                        href="${attachment.file || attachment.url}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        ${escapeHTML(
+                          attachment.name
+                        )}
+                      </a>
+                    </div>
+                  `;
+                }
+              )
+              .join("");
+
+          const embedsHTML =
+            message.embeds
+              .map(
+                (embed) => `
+                  <div
+                    class="discord-embed"
+                    ${
+                      embed.color
+                        ? `style="border-left-color:#${embed.color
+                            .toString(16)
+                            .padStart(
+                              6,
+                              "0"
+                            )}"`
+                        : ""
+                    }
+                  >
+
+                    ${
+                      embed.title
+                        ? `
+                          <div class="embed-title">
+                            ${
+                              embed.url
+                                ? `
+                                  <a
+                                    href="${escapeHTML(
+                                      embed.url
+                                    )}"
+                                    target="_blank"
+                                  >
+                                    ${escapeHTML(
+                                      embed.title
+                                    )}
+                                  </a>
+                                `
+                                : escapeHTML(
+                                    embed.title
+                                  )
+                            }
+                          </div>
+                        `
+                        : ""
+                    }
+
+                    ${
+                      embed.description
+                        ? `
+                          <div class="embed-description">
+                            ${formatContent(
+                              embed.description,
+                              guild
+                            )}
+                          </div>
+                        `
+                        : ""
+                    }
+
+                    ${
+                      embed.image
+                        ? `
+                          <img
+                            class="embed-image"
+                            src="${escapeHTML(
+                              embed.image
+                            )}"
+                            alt="Embed"
+                          >
+                        `
+                        : ""
+                    }
+
+                  </div>
+                `
+              )
+              .join("");
+
+          const stickerHTML =
+            message.sticker?.url
+              ? `
+                <div class="sticker">
+                  <img
+                    src="${escapeHTML(
+                      message.sticker.url
+                    )}"
+                    alt="${escapeHTML(
+                      message.sticker.name
+                    )}"
+                  >
+                </div>
+              `
+              : "";
+
+          return `
+            <div
+              class="message"
+              id="message-${escapeHTML(
+                message.id
+              )}"
+            >
+
+              ${
+                message.avatar
+                  ? `
+                    <img
+                      class="avatar"
+                      src="${message.avatar}"
+                      alt=""
+                    >
+                  `
+                  : `
+                    <div class="avatar placeholder">
+                      ?
+                    </div>
+                  `
+              }
+
+              <div class="message-body">
+
+                <div class="message-header">
+
+                  <span class="username">
+                    ${escapeHTML(
+                      message.author
+                    )}
+                  </span>
+
+                  ${
+                    message.bot
+                      ? `
+                        <span class="bot-tag">
+                          BOT
+                        </span>
+                      `
+                      : ""
+                  }
+
+                </div>
+
+                ${replyHTML}
+
+                ${
+                  content
+                    ? `
+                      <div class="content">
+                        ${content}
+                      </div>
+                    `
+                    : ""
+                }
+
+                ${attachmentsHTML}
+
+                ${embedsHTML}
+
+                ${stickerHTML}
+
+              </div>
+
+            </div>
+          `;
+        }
+      )
+      .join("");
+
+  // ==================================================
+  // HILOS
+  // ==================================================
+
+  const threadsHTML =
+    threads
+      .map(
+        (thread, index) => {
+          const threadMessages =
+            thread.messages
+              .map(
+                (message) => {
+                  const content =
+                    formatContent(
+                      message.content,
+                      guild
+                    );
+
+                  return `
+                    <div class="thread-message">
+
+                      ${
+                        message.avatar
+                          ? `
+                            <img
+                              class="thread-avatar"
+                              src="${message.avatar}"
+                              alt=""
+                            >
+                          `
+                          : ""
+                      }
+
+                      <div>
+                        <div class="thread-author">
+                          ${escapeHTML(
+                            message.author
+                          )}
+                        </div>
+
+                        <div class="thread-content">
+                          ${
+                            content ||
+                            "[Sin contenido]"
+                          }
+                        </div>
+                      </div>
+
+                    </div>
+                  `;
+                }
+              )
+              .join("");
+
+          return `
+            <div
+              class="thread-card"
+              onclick="openThread(${index})"
+            >
+
+              <div class="thread-card-icon">
+                🧵
+              </div>
+
+              <div class="thread-card-content">
+
+                <div class="thread-name">
+                  ${escapeHTML(
+                    thread.name ||
+                      "Hilo"
+                  )}
+                </div>
+
+                <div class="thread-meta">
+                  ${
+                    thread.messages.length
+                  }
+                  ${
+                    thread.messages.length ===
+                    1
+                      ? "mensaje"
+                      : "mensajes"
+                  }
+                </div>
+
+              </div>
+
+              <div class="thread-arrow">
+                ›
+              </div>
+
+            </div>
+
+            <div
+              class="thread-view"
+              id="thread-${index}"
+            >
+
+              <div class="thread-topbar">
+
+                <button
+                  class="back-button"
+                  onclick="closeThread(event, ${index})"
+                >
+                  ←
+                  <span>
+                    Salir del hilo
+                  </span>
+                </button>
+
+                <div class="thread-title">
+                  🧵
+                  ${escapeHTML(
+                    thread.name ||
+                      "Hilo"
+                  )}
+                </div>
+
+              </div>
+
+              <div class="thread-messages">
+
+                ${threadMessages}
+
+              </div>
+
+            </div>
+          `;
+        }
+      )
+      .join("");
+
+  // ==================================================
+  // HTML FINAL
   // ==================================================
 
   return `
@@ -348,704 +1005,1122 @@ function createTranscript(ticket, messages) {
 
 <head>
 
-  <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
 
-  <title>
-    Ticket ${escapeHTML(
-      ticket.id
-    )}
-  </title>
+<title>
+  Ticket ${escapeHTML(
+    ticket.id
+  )}
+</title>
 
-  <style>
+<style>
 
-    * {
-      box-sizing: border-box;
-    }
+* {
+  box-sizing: border-box;
+}
 
-    html {
-      scroll-behavior: smooth;
-    }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
 
-    body {
-      margin: 0;
+body {
+  background: #313338;
+  color: #dbdee1;
 
-      background:
-        radial-gradient(
-          circle at top,
-          #1c2230 0%,
-          #0f1117 45%,
-          #090b10 100%
-        );
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
 
-      color: #ffffff;
+/* ==========================================
+   PANEL
+   ========================================== */
 
-      font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
+.top-panel {
+  max-width: 1100px;
+  margin: 20px auto 0;
+  padding: 0 16px;
+}
 
-      min-height: 100vh;
-    }
+.info-panel {
+  background: #2b2d31;
 
-    a {
-      color: #6ea8ff;
-      text-decoration: none;
-    }
+  border:
+    1px solid
+    #1e1f22;
 
-    a:hover {
-      text-decoration: underline;
-    }
+  border-radius: 10px;
 
-    /* ==========================================
-       HEADER
-       ========================================== */
+  padding: 20px;
 
-    .header {
-      background: rgba(
-        23,
-        26,
-        35,
-        0.92
+  box-shadow:
+    0 4px 12px
+    rgba(0,0,0,.25);
+}
+
+.info-title {
+  font-size: 20px;
+  font-weight: 700;
+
+  color: #f2f3f5;
+
+  margin-bottom: 5px;
+}
+
+.info-category {
+  color: #949ba4;
+  font-size: 14px;
+
+  margin-bottom: 18px;
+}
+
+.info-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(
+        160px,
+        1fr
+      )
+    );
+
+  gap: 10px;
+}
+
+.info-item {
+  background: #1e1f22;
+
+  border-radius: 8px;
+
+  padding: 12px;
+}
+
+.info-label {
+  display: block;
+
+  color: #949ba4;
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  text-transform:
+    uppercase;
+
+  margin-bottom: 5px;
+}
+
+.info-value {
+  color: #f2f3f5;
+
+  font-size: 13px;
+
+  font-weight: 600;
+
+  overflow-wrap:
+    anywhere;
+}
+
+/* ==========================================
+   CANAL
+   ========================================== */
+
+.channel-wrapper {
+  max-width: 1100px;
+
+  margin: 18px auto 0;
+
+  padding:
+    0 16px 40px;
+}
+
+.channel {
+  background: #313338;
+
+  border-radius: 10px;
+
+  overflow: hidden;
+
+  min-height: 500px;
+
+  box-shadow:
+    0 4px 12px
+    rgba(0,0,0,.18);
+}
+
+.channel-header {
+  height: 52px;
+
+  display: flex;
+
+  align-items: center;
+
+  padding:
+    0 18px;
+
+  background: #2b2d31;
+
+  border-bottom:
+    1px solid
+    #1e1f22;
+
+  font-weight: 700;
+}
+
+.channel-icon {
+  color: #949ba4;
+
+  font-size: 24px;
+
+  margin-right: 8px;
+}
+
+.channel-name {
+  color: #f2f3f5;
+
+  font-size: 15px;
+}
+
+/* ==========================================
+   MENSAJES
+   ========================================== */
+
+.messages {
+  padding:
+    16px 8px 25px;
+}
+
+.message {
+  display: flex;
+
+  padding:
+    6px 16px;
+
+  gap: 14px;
+
+  border-radius: 4px;
+}
+
+.message:hover {
+  background:
+    rgba(255,255,255,.02);
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+
+  border-radius: 50%;
+
+  object-fit: cover;
+
+  flex-shrink: 0;
+
+  margin-top: 2px;
+}
+
+.placeholder {
+  background: #5865f2;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  color: white;
+
+  font-weight: 700;
+}
+
+.message-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.message-header {
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  margin-bottom: 2px;
+}
+
+.username {
+  color: #f2f3f5;
+
+  font-size: 15px;
+
+  font-weight: 600;
+}
+
+.bot-tag {
+  background: #5865f2;
+
+  color: white;
+
+  border-radius: 3px;
+
+  padding:
+    1px 4px;
+
+  font-size: 9px;
+
+  font-weight: 700;
+}
+
+.content {
+  color: #dbdee1;
+
+  font-size: 15px;
+
+  line-height: 1.45;
+
+  white-space: pre-wrap;
+
+  overflow-wrap:
+    anywhere;
+}
+
+.content a {
+  color: #00a8fc;
+
+  text-decoration: none;
+}
+
+.content a:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================
+   MENCIONES
+   ========================================== */
+
+.mention {
+  background:
+    rgba(88,101,242,.3);
+
+  color: #c9cdfb;
+
+  border-radius: 3px;
+
+  padding:
+    0 2px;
+
+  font-weight: 500;
+}
+
+.channel-mention {
+  background:
+    rgba(88,101,242,.3);
+
+  color: #c9cdfb;
+
+  border-radius: 3px;
+
+  padding:
+    0 2px;
+
+  font-weight: 500;
+}
+
+/* ==========================================
+   EMOJIS
+   ========================================== */
+
+.custom-emoji {
+  width: 22px;
+  height: 22px;
+
+  object-fit: contain;
+
+  vertical-align:
+    -5px;
+}
+
+/* ==========================================
+   RESPUESTAS
+   ========================================== */
+
+.reply {
+  display: flex;
+
+  align-items: center;
+
+  margin:
+    4px 0 4px;
+
+  color: #949ba4;
+}
+
+.reply-line {
+  width: 28px;
+  height: 18px;
+
+  border-left:
+    2px solid
+    #4e5058;
+
+  border-top:
+    2px solid
+    #4e5058;
+
+  border-radius:
+    7px 0 0 0;
+
+  margin-right: 7px;
+}
+
+.reply-author {
+  font-size: 12px;
+
+  font-weight: 600;
+
+  color: #b5bac1;
+}
+
+.reply-text {
+  font-size: 12px;
+
+  color: #949ba4;
+
+  max-width: 500px;
+
+  overflow: hidden;
+
+  white-space: nowrap;
+
+  text-overflow: ellipsis;
+}
+
+/* ==========================================
+   IMÁGENES
+   ========================================== */
+
+.attachment {
+  margin-top: 8px;
+}
+
+.attachment-image {
+  display: block;
+
+  max-width: 500px;
+  max-height: 450px;
+
+  border-radius: 8px;
+
+  object-fit: contain;
+
+  background: #1e1f22;
+}
+
+/* ==========================================
+   ARCHIVOS
+   ========================================== */
+
+.file {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  width: fit-content;
+
+  max-width: 100%;
+
+  margin-top: 8px;
+
+  padding:
+    10px 12px;
+
+  background: #2b2d31;
+
+  border:
+    1px solid
+    #1e1f22;
+
+  border-radius: 6px;
+
+  overflow-wrap:
+    anywhere;
+}
+
+.file-icon {
+  font-size: 18px;
+}
+
+.file a {
+  color: #00a8fc;
+
+  text-decoration: none;
+}
+
+/* ==========================================
+   EMBEDS
+   ========================================== */
+
+.discord-embed {
+  max-width: 520px;
+
+  margin-top: 8px;
+
+  padding:
+    12px;
+
+  background: #2b2d31;
+
+  border-left:
+    4px solid
+    #5865f2;
+
+  border-radius: 4px;
+}
+
+.embed-title {
+  color: #f2f3f5;
+
+  font-size: 15px;
+
+  font-weight: 700;
+
+  margin-bottom: 6px;
+}
+
+.embed-title a {
+  color: #00a8fc;
+
+  text-decoration: none;
+}
+
+.embed-description {
+  color: #dbdee1;
+
+  font-size: 14px;
+
+  line-height: 1.45;
+
+  white-space: pre-wrap;
+}
+
+.embed-image {
+  display: block;
+
+  max-width: 100%;
+
+  max-height: 400px;
+
+  margin-top: 10px;
+
+  border-radius: 4px;
+}
+
+/* ==========================================
+   STICKERS
+   ========================================== */
+
+.sticker {
+  margin-top: 8px;
+}
+
+.sticker img {
+  width: 160px;
+  height: 160px;
+
+  object-fit: contain;
+}
+
+/* ==========================================
+   HILOS
+   ========================================== */
+
+.thread-card {
+  margin:
+    10px 16px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  padding:
+    12px 14px;
+
+  background: #2b2d31;
+
+  border:
+    1px solid
+    #1e1f22;
+
+  border-radius: 8px;
+
+  cursor: pointer;
+
+  transition:
+    background .15s ease;
+}
+
+.thread-card:hover {
+  background: #35373c;
+}
+
+.thread-card-icon {
+  font-size: 22px;
+}
+
+.thread-card-content {
+  min-width: 0;
+
+  flex: 1;
+}
+
+.thread-name {
+  color: #f2f3f5;
+
+  font-size: 14px;
+
+  font-weight: 600;
+
+  overflow: hidden;
+
+  white-space: nowrap;
+
+  text-overflow: ellipsis;
+}
+
+.thread-meta {
+  color: #949ba4;
+
+  font-size: 12px;
+
+  margin-top: 2px;
+}
+
+.thread-arrow {
+  color: #949ba4;
+
+  font-size: 25px;
+}
+
+.thread-view {
+  display: none;
+
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 100;
+
+  background: #313338;
+}
+
+.thread-view.active {
+  display: flex;
+
+  flex-direction: column;
+}
+
+.thread-topbar {
+  min-height: 54px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 15px;
+
+  padding:
+    0 18px;
+
+  background: #2b2d31;
+
+  border-bottom:
+    1px solid
+    #1e1f22;
+}
+
+.back-button {
+  border: none;
+
+  background: transparent;
+
+  color: #b5bac1;
+
+  font-size: 14px;
+
+  cursor: pointer;
+
+  padding: 7px 10px;
+
+  border-radius: 5px;
+}
+
+.back-button:hover {
+  background: #404249;
+
+  color: #f2f3f5;
+}
+
+.thread-title {
+  color: #f2f3f5;
+
+  font-weight: 700;
+
+  font-size: 15px;
+}
+
+.thread-messages {
+  flex: 1;
+
+  overflow-y: auto;
+
+  padding:
+    20px 12px 40px;
+}
+
+.thread-message {
+  display: flex;
+
+  gap: 10px;
+
+  padding:
+    7px 10px;
+
+  margin-bottom: 2px;
+}
+
+.thread-avatar {
+  width: 36px;
+  height: 36px;
+
+  border-radius: 50%;
+
+  object-fit: cover;
+}
+
+.thread-author {
+  color: #f2f3f5;
+
+  font-size: 14px;
+
+  font-weight: 600;
+
+  margin-bottom: 2px;
+}
+
+.thread-content {
+  color: #dbdee1;
+
+  font-size: 14px;
+
+  line-height: 1.45;
+
+  white-space: pre-wrap;
+
+  overflow-wrap:
+    anywhere;
+}
+
+/* ==========================================
+   FOOTER
+   ========================================== */
+
+.footer {
+  text-align: center;
+
+  color: #6d7078;
+
+  font-size: 11px;
+
+  padding:
+    25px 10px;
+}
+
+/* ==========================================
+   MOBILE
+   ========================================== */
+
+@media (
+  max-width: 650px
+) {
+
+  .top-panel {
+    margin-top: 10px;
+
+    padding:
+      0 8px;
+  }
+
+  .info-panel {
+    padding: 14px;
+  }
+
+  .info-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
       );
+  }
 
-      backdrop-filter: blur(12px);
+  .channel-wrapper {
+    padding:
+      0 8px 25px;
+  }
 
-      border-bottom:
-        1px solid
-        #292d38;
+  .messages {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
 
-      padding: 28px 20px;
+  .message {
+    padding:
+      6px 8px;
 
-      position: sticky;
-      top: 0;
+    gap: 9px;
+  }
 
-      z-index: 10;
-    }
+  .avatar {
+    width: 36px;
+    height: 36px;
+  }
 
-    .header-inner {
-      max-width: 1100px;
+  .content {
+    font-size: 14px;
+  }
 
-      margin: auto;
-    }
+  .attachment-image {
+    max-width: 100%;
 
-    .header h1 {
-      margin: 0 0 8px;
+    max-height: 350px;
+  }
 
-      font-size: 25px;
-    }
+  .discord-embed {
+    max-width: 100%;
+  }
 
-    .header p {
-      margin: 4px 0;
+  .thread-card {
+    margin:
+      10px 8px;
+  }
 
-      color: #aeb4c0;
+}
 
-      font-size: 14px;
-    }
-
-    /* ==========================================
-       CONTAINER
-       ========================================== */
-
-    .container {
-      max-width: 1100px;
-
-      margin: 30px auto;
-
-      padding:
-        0 20px 40px;
-    }
-
-    /* ==========================================
-       INFO
-       ========================================== */
-
-    .info {
-      background: rgba(
-        23,
-        26,
-        35,
-        0.95
-      );
-
-      border:
-        1px solid
-        #292d38;
-
-      border-radius: 14px;
-
-      padding: 20px;
-
-      margin-bottom: 20px;
-
-      box-shadow:
-        0 10px 30px
-        rgba(0, 0, 0, 0.18);
-    }
-
-    .info-grid {
-      display: grid;
-
-      grid-template-columns:
-        repeat(
-          auto-fit,
-          minmax(
-            190px,
-            1fr
-          )
-        );
-
-      gap: 12px;
-    }
-
-    .info-item {
-      background: #10131a;
-
-      border:
-        1px solid
-        #222631;
-
-      border-radius: 10px;
-
-      padding: 15px;
-    }
-
-    .label {
-      display: block;
-
-      color: #777f8d;
-
-      font-size: 11px;
-
-      margin-bottom: 6px;
-
-      text-transform:
-        uppercase;
-
-      letter-spacing:
-        0.5px;
-    }
-
-    .value {
-      font-size: 14px;
-
-      font-weight: 600;
-
-      overflow-wrap:
-        anywhere;
-    }
-
-    /* ==========================================
-       MESSAGES
-       ========================================== */
-
-    .messages {
-      background: rgba(
-        23,
-        26,
-        35,
-        0.95
-      );
-
-      border:
-        1px solid
-        #292d38;
-
-      border-radius: 14px;
-
-      overflow: hidden;
-
-      box-shadow:
-        0 10px 30px
-        rgba(0, 0, 0, 0.18);
-    }
-
-    .messages-title {
-      padding: 18px 20px;
-
-      border-bottom:
-        1px solid
-        #292d38;
-
-      font-size: 18px;
-
-      font-weight: 700;
-    }
-
-    .message {
-      display: flex;
-
-      gap: 14px;
-
-      padding: 18px 20px;
-
-      border-bottom:
-        1px solid
-        #222631;
-    }
-
-    .message:last-child {
-      border-bottom: none;
-    }
-
-    .avatar {
-      width: 42px;
-
-      height: 42px;
-
-      border-radius: 50%;
-
-      flex-shrink: 0;
-
-      object-fit: cover;
-    }
-
-    .placeholder {
-      display: flex;
-
-      align-items: center;
-
-      justify-content: center;
-
-      background: #252a35;
-
-      color: #8d95a3;
-
-      font-weight: 700;
-    }
-
-    .message-content {
-      min-width: 0;
-
-      flex: 1;
-    }
-
-    .message-header {
-      display: flex;
-
-      gap: 10px;
-
-      align-items: baseline;
-
-      margin-bottom: 6px;
-
-      flex-wrap: wrap;
-    }
-
-    .username {
-      font-weight: 700;
-
-      font-size: 15px;
-    }
-
-    .timestamp {
-      color: #777f8d;
-
-      font-size: 11px;
-    }
-
-    .content {
-      color: #d9dce2;
-
-      white-space: pre-wrap;
-
-      overflow-wrap: anywhere;
-
-      line-height: 1.55;
-
-      font-size: 14px;
-    }
-
-    /* ==========================================
-       ATTACHMENTS
-       ========================================== */
-
-    .attachments {
-      margin-top: 10px;
-
-      display: flex;
-
-      flex-direction: column;
-
-      gap: 8px;
-    }
-
-    .image-attachment img {
-      max-width: 420px;
-
-      width: 100%;
-
-      max-height: 420px;
-
-      object-fit: contain;
-
-      border-radius: 8px;
-
-      border:
-        1px solid
-        #292d38;
-
-      background: #0b0d12;
-    }
-
-    .attachment-file {
-      display: inline-block;
-
-      background: #10131a;
-
-      border:
-        1px solid
-        #292d38;
-
-      border-radius: 8px;
-
-      padding: 9px 12px;
-
-      width: fit-content;
-
-      max-width: 100%;
-
-      overflow-wrap:
-        anywhere;
-    }
-
-    /* ==========================================
-       EMBEDS
-       ========================================== */
-
-    .embeds {
-      display: flex;
-
-      flex-direction: column;
-
-      gap: 10px;
-
-      margin-top: 10px;
-    }
-
-    .embed {
-      background: #10131a;
-
-      border-left:
-        4px solid
-        #5865f2;
-
-      border-radius: 6px;
-
-      padding: 12px;
-
-      max-width: 650px;
-    }
-
-    .embed-title {
-      font-weight: 700;
-
-      margin-bottom: 7px;
-    }
-
-    .embed-description {
-      color: #c5c9d1;
-
-      white-space: pre-wrap;
-
-      overflow-wrap:
-        anywhere;
-
-      line-height: 1.5;
-    }
-
-    .embed-image {
-      display: block;
-
-      max-width: 100%;
-
-      max-height: 400px;
-
-      margin-top: 10px;
-
-      border-radius: 6px;
-    }
-
-    /* ==========================================
-       EMPTY
-       ========================================== */
-
-    .empty {
-      padding: 35px 20px;
-
-      text-align: center;
-
-      color: #858c99;
-    }
-
-    /* ==========================================
-       FOOTER
-       ========================================== */
-
-    .footer {
-      text-align: center;
-
-      color: #646b78;
-
-      padding: 25px 10px;
-
-      font-size: 12px;
-    }
-
-    /* ==========================================
-       MOBILE
-       ========================================== */
-
-    @media (
-      max-width: 600px
-    ) {
-
-      .header {
-        padding: 20px 15px;
-      }
-
-      .header h1 {
-        font-size: 21px;
-      }
-
-      .container {
-        margin-top: 20px;
-
-        padding:
-          0 10px 30px;
-      }
-
-      .message {
-        padding:
-          15px 12px;
-
-        gap: 10px;
-      }
-
-      .avatar {
-        width: 36px;
-
-        height: 36px;
-      }
-
-      .message-header {
-        gap: 6px;
-      }
-
-      .username {
-        font-size: 14px;
-      }
-
-      .timestamp {
-        font-size: 10px;
-      }
-
-      .content {
-        font-size: 13px;
-      }
-
-      .image-attachment img {
-        max-height: 300px;
-      }
-
-    }
-
-  </style>
+</style>
 
 </head>
 
 <body>
 
-  <div class="header">
+<!-- ==========================================
+     PANEL SUPERIOR
+     ========================================== -->
 
-    <div class="header-inner">
+<div class="top-panel">
 
-      <h1>
-        Ticket Transcript
-      </h1>
+  <div class="info-panel">
 
-      <p>
-        ${escapeHTML(
-          category
-        )}
-      </p>
+    <div class="info-title">
+      Ticket Transcript
+    </div>
+
+    <div class="info-category">
+      ${escapeHTML(
+        category
+      )}
+    </div>
+
+    <div class="info-grid">
+
+      <div class="info-item">
+        <span class="info-label">
+          Ticket ID
+        </span>
+
+        <span class="info-value">
+          ${escapeHTML(
+            ticket.id
+          )}
+        </span>
+      </div>
+
+      <div class="info-item">
+        <span class="info-label">
+          Usuario
+        </span>
+
+        <span class="info-value">
+          ${escapeHTML(
+            userName
+          )}
+        </span>
+      </div>
+
+      <div class="info-item">
+        <span class="info-label">
+          Categoría
+        </span>
+
+        <span class="info-value">
+          ${escapeHTML(
+            category
+          )}
+        </span>
+      </div>
+
+      <div class="info-item">
+        <span class="info-label">
+          Staff
+        </span>
+
+        <span class="info-value">
+          ${claimedBy}
+        </span>
+      </div>
+
+      <div class="info-item">
+        <span class="info-label">
+          Creado
+        </span>
+
+        <span class="info-value">
+          ${escapeHTML(
+            createdAt
+          )}
+        </span>
+      </div>
+
+      <div class="info-item">
+        <span class="info-label">
+          Mensajes
+        </span>
+
+        <span class="info-value">
+          ${
+            preparedMessages.length
+          }
+        </span>
+      </div>
 
     </div>
 
   </div>
 
-  <div class="container">
+</div>
 
-    <div class="info">
+<!-- ==========================================
+     CANAL
+     ========================================== -->
 
-      <div class="info-grid">
+<div class="channel-wrapper">
 
-        <div class="info-item">
+  <div class="channel">
 
-          <span class="label">
-            Ticket ID
-          </span>
+    <div class="channel-header">
 
-          <span class="value">
-            ${escapeHTML(
-              ticket.id
-            )}
-          </span>
+      <span class="channel-icon">
+        #
+      </span>
 
-        </div>
-
-        <div class="info-item">
-
-          <span class="label">
-            Usuario
-          </span>
-
-          <span class="value">
-            ${escapeHTML(
-              ticket.userId ||
-                "Desconocido"
-            )}
-          </span>
-
-        </div>
-
-        <div class="info-item">
-
-          <span class="label">
-            Categoría
-          </span>
-
-          <span class="value">
-            ${escapeHTML(
-              category
-            )}
-          </span>
-
-        </div>
-
-        <div class="info-item">
-
-          <span class="label">
-            Staff
-          </span>
-
-          <span class="value">
-            ${claimedBy}
-          </span>
-
-        </div>
-
-        <div class="info-item">
-
-          <span class="label">
-            Creado
-          </span>
-
-          <span class="value">
-            ${escapeHTML(
-              createdAt
-            )}
-          </span>
-
-        </div>
-
-        <div class="info-item">
-
-          <span class="label">
-            Mensajes
-          </span>
-
-          <span class="value">
-            ${messageList.length}
-          </span>
-
-        </div>
-
-      </div>
+      <span class="channel-name">
+        ${escapeHTML(
+          ticket.channelName ||
+            category
+        )}
+      </span>
 
     </div>
 
     <div class="messages">
 
-      <div class="messages-title">
-        Mensajes
-      </div>
-
       ${
-        messageHTML ||
+        messagesHTML ||
         `
-          <div class="empty">
+          <div
+            style="
+              text-align:center;
+              padding:40px;
+              color:#949ba4;
+            "
+          >
             No hay mensajes en este ticket.
           </div>
         `
       }
 
-    </div>
+      ${threadsHTML}
 
-    <div class="footer">
-      Staff Support — Ticket Transcript
     </div>
 
   </div>
 
+</div>
+
+<div class="footer">
+  Staff Support — Ticket Transcript
+</div>
+
+<script>
+
+function openThread(index) {
+  const thread =
+    document.getElementById(
+      "thread-" + index
+    );
+
+  if (thread) {
+    thread.classList.add(
+      "active"
+    );
+  }
+}
+
+function closeThread(
+  event,
+  index
+) {
+  event.stopPropagation();
+
+  const thread =
+    document.getElementById(
+      "thread-" + index
+    );
+
+  if (thread) {
+    thread.classList.remove(
+      "active"
+    );
+  }
+}
+
+</script>
+
 </body>
 
 </html>
-  `;
+`;
 }
 
 // ==================================================
 // GUARDAR TRANSCRIPCIÓN
 // ==================================================
 
-function saveTranscript(
+async function saveTranscript(
   ticket,
-  messages
+  messages,
+  threads = [],
+  guild = null
 ) {
-  const html =
-    createTranscript(
-      ticket,
-      messages
-    );
+  try {
+    const preparedMessages =
+      await prepareMessages(
+        messages,
+        ticket,
+        guild
+      );
 
-  const filePath =
-    path.join(
-      TRANSCRIPTS_DIR,
-      `${ticket.id}.html`
-    );
+    const preparedThreads =
+      [];
 
-  fs.writeFileSync(
-    filePath,
-    html,
-    "utf8"
-  );
+    for (
+      const thread of threads
+    ) {
+      const prepared =
+        await prepareMessages(
+          thread.messages,
+          ticket,
+          guild
+        );
 
-  return ticket.id;
-}
+      preparedThreads.push({
+        ...thread,
+        messages:
+          prepared,
+      });
+    }
 
-// ==================================================
-// RUTA WEB
-// ==================================================
-
-app.get(
-  "/transcript/:id",
-  (req, res) => {
-    const safeId =
-      String(
-        req.params.id
-      ).replace(
-        /[^a-zA-Z0-9_-]/g,
-        ""
+    const html =
+      createTranscriptHTML(
+        ticket,
+        preparedMessages,
+        preparedThreads,
+        guild
       );
 
     const filePath =
       path.join(
         TRANSCRIPTS_DIR,
-        `${safeId}.html`
+        `${safeId(
+          ticket.id
+        )}.html`
+      );
+
+    fs.writeFileSync(
+      filePath,
+      html,
+      "utf8"
+    );
+
+    console.log(
+      `💾 Transcripción guardada: ${filePath}`
+    );
+
+    return ticket.id;
+
+  } catch (error) {
+    console.error(
+      "❌ Error guardando transcripción:",
+      error
+    );
+
+    throw error;
+  }
+}
+
+// ==================================================
+// SERVIR ARCHIVOS
+// ==================================================
+
+app.use(
+  "/transcript-assets",
+  express.static(
+    ASSETS_DIR
+  )
+);
+
+// ==================================================
+// RUTA DE TRANSCRIPCIÓN
+// ==================================================
+
+app.get(
+  "/transcript/:id",
+  (req, res) => {
+    const id =
+      safeId(
+        req.params.id
+      );
+
+    const filePath =
+      path.join(
+        TRANSCRIPTS_DIR,
+        `${id}.html`
       );
 
     if (
@@ -1057,21 +2132,27 @@ app.get(
         .status(404)
         .send(`
           <!DOCTYPE html>
+
           <html lang="es">
+
           <head>
             <meta charset="UTF-8">
-            <title>Transcript not found</title>
+
+            <title>
+              Transcript not found
+            </title>
           </head>
 
           <body
             style="
-              background:#0f1117;
-              color:white;
+              background:#313338;
+              color:#dbdee1;
               font-family:Arial;
               text-align:center;
-              padding:50px;
+              padding:60px;
             "
           >
+
             <h1>
               Transcript not found
             </h1>
@@ -1080,7 +2161,9 @@ app.get(
               Esta transcripción no existe
               o fue eliminada.
             </p>
+
           </body>
+
           </html>
         `);
     }
@@ -1108,7 +2191,7 @@ function startTranscriptServer() {
       );
 
       console.log(
-        `💾 Transcripciones guardadas en: ${TRANSCRIPTS_DIR}`
+        `💾 Archivos: ${DATA_DIR}`
       );
     }
   );

@@ -21,61 +21,52 @@ const {
 } = require("./transcripts");
 
 // ==================================================
-// MEMORIA DE TICKETS
+// TICKETS ACTIVOS
 // ==================================================
 
 const tickets = new Map();
 
 // ==================================================
-// UTILIDADES
+// CATEGORÍAS
 // ==================================================
 
-function getTicketId() {
-  return `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
+const TICKET_TYPES = {
+  general_support: {
+    label: "General Support",
+    emoji:
+      config.emojis.generalSupport,
+  },
 
-function getCategoryInfo(type) {
-  const categories = {
-    general_support: {
-      name: "General Support",
-      emoji: config.emojis.generalSupport,
-    },
+  report_bugs: {
+    label: "Report Bugs",
+    emoji:
+      config.emojis.reportBugs,
+  },
 
-    report_bugs: {
-      name: "Report Bugs",
-      emoji: config.emojis.reportBugs,
-    },
+  get_help: {
+    label: "Get Help",
+    emoji:
+      config.emojis.getHelp,
+  },
 
-    get_help: {
-      name: "Get Help",
-      emoji: config.emojis.getHelp,
-    },
-
-    other: {
-      name: "Other",
-      emoji: config.emojis.other,
-    },
-  };
-
-  return categories[type];
-}
-
-function isStaff(interaction) {
-  return (
-    interaction.member?.roles?.cache?.has(
-      config.roles.staff
-    ) || false
-  );
-}
+  other: {
+    label: "Other",
+    emoji:
+      config.emojis.other,
+  },
+};
 
 // ==================================================
-// PANEL PRINCIPAL
+// CREAR PANEL
 // ==================================================
 
-async function sendTicketsPanel(client) {
-  const channel = await client.channels.fetch(
-    config.channels.ticketsPanel
-  );
+async function sendTicketsPanel(
+  client
+) {
+  const channel =
+    await client.channels.fetch(
+      config.channels.ticketsPanel
+    );
 
   if (!channel) {
     throw new Error(
@@ -83,198 +74,230 @@ async function sendTicketsPanel(client) {
     );
   }
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId("ticket_category")
-    .setPlaceholder("Select a ticket type")
-    .addOptions(
-      {
-        label: "General Support",
-        description: "Get support from the staff team",
-        value: "general_support",
-        emoji: config.emojis.generalSupport,
-      },
-      {
-        label: "Report Bugs",
-        description: "Report a bug",
-        value: "report_bugs",
-        emoji: config.emojis.reportBugs,
-      },
-      {
-        label: "Get Help",
-        description: "Get help and answers",
-        value: "get_help",
-        emoji: config.emojis.getHelp,
-      },
-      {
-        label: "Other",
-        description: "Other problems or requests",
-        value: "other",
-        emoji: config.emojis.other,
-      }
-    );
+  const container =
+    new ContainerBuilder();
 
-  const row = new ActionRowBuilder().addComponents(
-    menu
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      "# 🎫 Staff Support\n\n" +
+        "¿Necesitas ayuda?\n\n" +
+        "Selecciona una categoría en el menú inferior para abrir un ticket."
+    )
   );
 
-  const container = new ContainerBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `# SA Support tickets ${config.emojis.getHelp}`
+  const menu =
+    new StringSelectMenuBuilder()
+      .setCustomId(
+        "ticket_category"
       )
-    )
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `**${config.emojis.generalSupport} General Support**\n` +
-          `Get Support from the staff team\n` +
-          `-# questions about the bot goes in get help\n\n` +
-
-          `**${config.emojis.reportBugs} Report Bugs**\n` +
-          `Report bot, server or support bot bugs\n\n` +
-
-          `**${config.emojis.getHelp} Get Help**\n` +
-          `Get help to config bot, answer your questions and other things related\n\n` +
-
-          `**${config.emojis.other} Other**\n` +
-          `any panel describes your problem? Open this ticket tu get support\n\n` +
-
-          `-# Joke tickets can be Sanctioned ${config.emojis.reportBugs}`
+      .setPlaceholder(
+        "Selecciona una categoría"
       )
-    )
-    .addActionRowComponents(row);
+      .addOptions(
+        {
+          label:
+            "General Support",
+          description:
+            "Ayuda general",
+          value:
+            "general_support",
+          emoji:
+            config.emojis
+              .generalSupport,
+        },
+        {
+          label:
+            "Report Bugs",
+          description:
+            "Reporta un error o bug",
+          value:
+            "report_bugs",
+          emoji:
+            config.emojis
+              .reportBugs,
+        },
+        {
+          label:
+            "Get Help",
+          description:
+            "Necesitas ayuda con algo",
+          value:
+            "get_help",
+          emoji:
+            config.emojis
+              .getHelp,
+        },
+        {
+          label:
+            "Other",
+          description:
+            "Otro tipo de solicitud",
+          value:
+            "other",
+          emoji:
+            config.emojis
+              .other,
+        }
+      );
 
-  const messages = await channel.messages.fetch({
-    limit: 50,
-  });
-
-  const existing = messages.find(
-    (message) =>
-      message.author.id === client.user.id &&
-      message.flags.has(
-        MessageFlags.IsComponentsV2
-      ) &&
-      message.components.some(
-        (component) =>
-          component.type === 17
-      )
-  );
-
-  if (existing) {
-    return existing;
-  }
-
-  return await channel.send({
-    components: [container],
-    flags: MessageFlags.IsComponentsV2,
-  });
-}
-
-// ==================================================
-// PREGUNTA GENERAL SUPPORT
-// ==================================================
-
-async function showGeneralSupportModal(interaction) {
-  const modal = new ModalBuilder()
-    .setCustomId(
-      "ticket_general_support_modal"
-    )
-    .setTitle("General Support");
-
-  const input = new TextInputBuilder()
-    .setCustomId("ticket_question")
-    .setLabel("¿Que necesitas?")
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder(
-      "Describe lo que necesitas..."
-    )
-    .setRequired(true)
-    .setMaxLength(1000);
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(input)
-  );
-
-  await interaction.showModal(modal);
-}
-
-// ==================================================
-// PREGUNTA GET HELP
-// ==================================================
-
-async function showGetHelpModal(interaction) {
-  const modal = new ModalBuilder()
-    .setCustomId(
-      "ticket_get_help_modal"
-    )
-    .setTitle("Get Help");
-
-  const input = new TextInputBuilder()
-    .setCustomId("ticket_question")
-    .setLabel("¿Cuál es tu duda?")
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder(
-      "Escribe tu pregunta..."
-    )
-    .setRequired(true)
-    .setMaxLength(1000);
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(input)
-  );
-
-  await interaction.showModal(modal);
-}
-
-// ==================================================
-// REPORT BUGS
-// ==================================================
-
-async function showBugMenu(interaction) {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId("ticket_bug_type")
-    .setPlaceholder(
-      "Select the type of bug"
-    )
-    .addOptions(
-      {
-        label: "Server bugs",
-        value: "Server bugs",
-        description: "Report a server bug",
-      },
-      {
-        label: "Bot bugs",
-        value: "Bot bugs",
-        description: "Report a bot bug",
-      },
-      {
-        label: "Web bugs",
-        value: "Web bugs",
-        description: "Report a web bug",
-      },
-      {
-        label: "Support bot bugs",
-        value: "Support bot bugs",
-        description:
-          "Report a support bot bug",
-      },
-      {
-        label: "Other bugs",
-        value: "Other bugs",
-        description:
-          "Report another type of bug",
-      }
-    );
-
-  const row =
+  container.addActionRowComponents(
     new ActionRowBuilder().addComponents(
       menu
-    );
+    )
+  );
+
+  await channel.send({
+    components: [container],
+
+    flags:
+      MessageFlags.IsComponentsV2,
+  });
+
+  console.log(
+    "🎫 Panel de tickets enviado."
+  );
+}
+
+// ==================================================
+// MODAL GENERAL
+// ==================================================
+
+async function showGeneralSupportModal(
+  interaction
+) {
+  const modal =
+    new ModalBuilder()
+      .setCustomId(
+        "ticket_modal_general"
+      )
+      .setTitle(
+        "General Support"
+      );
+
+  const input =
+    new TextInputBuilder()
+      .setCustomId(
+        "ticket_reason"
+      )
+      .setLabel(
+        "¿En qué podemos ayudarte?"
+      )
+      .setStyle(
+        TextInputStyle.Paragraph
+      )
+      .setRequired(true)
+      .setPlaceholder(
+        "Describe tu problema..."
+      )
+      .setMaxLength(1000);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      input
+    )
+  );
+
+  await interaction.showModal(
+    modal
+  );
+}
+
+// ==================================================
+// MODAL GET HELP
+// ==================================================
+
+async function showGetHelpModal(
+  interaction
+) {
+  const modal =
+    new ModalBuilder()
+      .setCustomId(
+        "ticket_modal_help"
+      )
+      .setTitle(
+        "Get Help"
+      );
+
+  const input =
+    new TextInputBuilder()
+      .setCustomId(
+        "ticket_reason"
+      )
+      .setLabel(
+        "¿Qué necesitas?"
+      )
+      .setStyle(
+        TextInputStyle.Paragraph
+      )
+      .setRequired(true)
+      .setPlaceholder(
+        "Explica lo que necesitas..."
+      )
+      .setMaxLength(1000);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      input
+    )
+  );
+
+  await interaction.showModal(
+    modal
+  );
+}
+
+// ==================================================
+// MENÚ REPORT BUGS
+// ==================================================
+
+async function showBugMenu(
+  interaction
+) {
+  const menu =
+    new StringSelectMenuBuilder()
+      .setCustomId(
+        "ticket_bug_type"
+      )
+      .setPlaceholder(
+        "Selecciona el tipo de bug"
+      )
+      .addOptions(
+        {
+          label:
+            "Discord Bot",
+          description:
+            "Problema relacionado con el bot",
+          value:
+            "discord_bot",
+        },
+        {
+          label:
+            "Website",
+          description:
+            "Problema relacionado con la web",
+          value:
+            "website",
+        },
+        {
+          label:
+            "Other",
+          description:
+            "Otro problema",
+          value:
+            "other",
+        }
+      );
 
   await interaction.reply({
     content:
-      "Select the type of bug you want to report.",
-    components: [row],
-    flags: MessageFlags.Ephemeral,
+      "Selecciona el tipo de bug:",
+    components: [
+      new ActionRowBuilder().addComponents(
+        menu
+      ),
+    ],
+    flags:
+      MessageFlags.Ephemeral,
   });
 }
 
@@ -285,227 +308,216 @@ async function showBugMenu(interaction) {
 async function createTicket(
   interaction,
   type,
-  question = null,
-  bugType = null
+  reason = "Sin descripción"
 ) {
-  const guild = interaction.guild;
+  const guild =
+    interaction.guild;
 
   if (!guild) {
     return;
   }
 
-  const existingTicket =
-    [...tickets.values()].find(
-      (ticket) =>
-        ticket.userId ===
-          interaction.user.id &&
-        ticket.status === "open"
-    );
+  // Evitar varios tickets
+  const existing =
+    [...tickets.values()]
+      .find(
+        (ticket) =>
+          ticket.guildId ===
+            guild.id &&
+          ticket.userId ===
+            interaction.user.id
+      );
 
-  if (existingTicket) {
-    await interaction.reply({
+  if (existing) {
+    return interaction.reply({
       content:
-        `Ya tienes un ticket abierto: <#${existingTicket.channelId}>`,
-      flags: MessageFlags.Ephemeral,
+        `❌ Ya tienes un ticket abierto: <#${existing.channelId}>`,
+      flags:
+        MessageFlags.Ephemeral,
     });
-
-    return;
   }
 
   const category =
-    getCategoryInfo(type);
-
-  const ticketId =
-    getTicketId();
-
-  const channelName =
-    `${type.replace(
-      /_/g,
-      "-"
-    )}-${interaction.user.username}`
-      .toLowerCase()
-      .replace(
-        /[^a-z0-9-]/g,
-        ""
-      )
-      .slice(0, 90);
-
-  const staffRole =
-    guild.roles.cache.get(
-      config.roles.staff
-    );
-
-  const permissionOverwrites = [
-    {
-      id: guild.id,
-      deny: [
-        PermissionFlagsBits.ViewChannel,
-      ],
-    },
-
-    {
-      id: interaction.user.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-      ],
-    },
-
-    {
-      id: interaction.client.user.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.ManageMessages,
-      ],
-    },
-  ];
-
-  if (staffRole) {
-    permissionOverwrites.push({
-      id: staffRole.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-      ],
-    });
-  }
+    TICKET_TYPES[type] ||
+    TICKET_TYPES.other;
 
   const channel =
     await guild.channels.create({
-      name: channelName,
-      type: ChannelType.GuildText,
-      permissionOverwrites,
+      name:
+        `ticket-${interaction.user.username
+          .toLowerCase()
+          .replace(
+            /[^a-z0-9]/g,
+            ""
+          )
+          .slice(0, 18)}`,
+
+      type:
+        ChannelType.GuildText,
+
+      permissionOverwrites: [
+        {
+          id:
+            guild.roles.everyone.id,
+
+          deny: [
+            PermissionFlagsBits.ViewChannel,
+          ],
+        },
+
+        {
+          id:
+            interaction.user.id,
+
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.AttachFiles,
+            PermissionFlagsBits.EmbedLinks,
+          ],
+        },
+
+        {
+          id:
+            config.roles.staff,
+
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.AttachFiles,
+            PermissionFlagsBits.EmbedLinks,
+          ],
+        },
+
+        {
+          id:
+            guild.members.me.id,
+
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.ManageChannels,
+            PermissionFlagsBits.ManageMessages,
+            PermissionFlagsBits.AttachFiles,
+            PermissionFlagsBits.EmbedLinks,
+          ],
+        },
+      ],
     });
 
   const ticket = {
-    id: ticketId,
-    channelId: channel.id,
-    userId: interaction.user.id,
-    claimedBy: null,
+    id:
+      channel.id,
+
+    channelId:
+      channel.id,
+
+    channelName:
+      channel.name,
+
+    guildId:
+      guild.id,
+
+    userId:
+      interaction.user.id,
+
     type,
-    question,
-    bugType,
-    status: "open",
-    createdAt: Date.now(),
-    messages: [],
+
+    reason,
+
+    claimedBy:
+      null,
+
+    createdAt:
+      Date.now(),
   };
 
   tickets.set(
-    ticketId,
+    channel.id,
     ticket
   );
 
   const embed =
     new EmbedBuilder()
+      .setColor(0x5865f2)
       .setTitle(
-        `SA Support tickets ${config.emojis.getHelp}`
+        `${category.emoji} ${category.label}`
       )
       .setDescription(
-        `**Selected panel:** ${category.emoji} ${category.name}\n\n` +
-
-          `**User info:**\n` +
-          `user: <@${interaction.user.id}>\n` +
-          `id: \`${interaction.user.id}\`\n\n` +
-
-          `**Questions:**\n` +
-
-          (
-            question
-              ? `**1.** ${
-                  type === "get_help"
-                    ? "¿Cuál es tu duda?"
-                    : "¿Que necesitas?"
-                }\n` +
-                `> ${question}`
-              : bugType
-                ? `**1.** Bug type\n` +
-                  `> ${bugType}`
-                : `> No questions provided.`
-          )
+        `**Usuario:** <@${interaction.user.id}>\n\n` +
+          `**Solicitud:**\n${reason}`
       )
-      .setColor(0xffd700)
-      .setTimestamp();
+      .setFooter({
+        text:
+          "Staff Support",
+      });
 
-  const buttons =
-    new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            `ticket_claim:${ticketId}`
-          )
-          .setLabel(
-            "Reclamar ticket"
-          )
-          .setStyle(
-            ButtonStyle.Primary
-          )
-          .setEmoji(
-            config.emojis.claim
-          ),
-
-        new ButtonBuilder()
-          .setCustomId(
-            `ticket_close:${ticketId}`
-          )
-          .setLabel(
-            "Cerrar ticket"
-          )
-          .setStyle(
-            ButtonStyle.Danger
-          )
-          .setEmoji(
-            config.emojis.close
-          )
+  const claimButton =
+    new ButtonBuilder()
+      .setCustomId(
+        "ticket_claim"
+      )
+      .setLabel(
+        "Reclamar"
+      )
+      .setStyle(
+        ButtonStyle.Primary
+      )
+      .setEmoji(
+        config.emojis.claim
       );
 
-  const mentions =
-    staffRole
-      ? `<@&${staffRole.id}> <@${interaction.user.id}>`
-      : `<@${interaction.user.id}>`;
+  const closeButton =
+    new ButtonBuilder()
+      .setCustomId(
+        "ticket_close"
+      )
+      .setLabel(
+        "Cerrar"
+      )
+      .setStyle(
+        ButtonStyle.Danger
+      )
+      .setEmoji(
+        config.emojis.close
+      );
+
+  const row =
+    new ActionRowBuilder()
+      .addComponents(
+        claimButton,
+        closeButton
+      );
 
   await channel.send({
-    content: mentions,
+    content:
+      `<@&${config.roles.staff}> <@${interaction.user.id}>`,
     embeds: [embed],
-    components: [buttons],
-
-    allowedMentions: {
-      roles: staffRole
-        ? [staffRole.id]
-        : [],
-      users: [
-        interaction.user.id,
-      ],
-    },
+    components: [row],
   });
 
-  if (
-    interaction.isRepliable() &&
-    !interaction.replied &&
-    !interaction.deferred
-  ) {
-    await interaction.reply({
-      content:
-        `${category.emoji} Tu ticket fue creado: <#${channel.id}>`,
-      flags: MessageFlags.Ephemeral,
-    });
-  }
+  await interaction.reply({
+    content:
+      `✅ Tu ticket ha sido creado: ${channel}`,
+    flags:
+      MessageFlags.Ephemeral,
+  });
 }
 
 // ==================================================
-// RECOPILAR MENSAJES
+// RECOPILAR TODOS LOS MENSAJES
 // ==================================================
 
 async function collectTicketMessages(
   channel
 ) {
-  const allMessages = [];
+  const messages =
+    [];
 
-  let lastId;
+  let lastId = null;
 
   while (true) {
     const options = {
@@ -513,7 +525,8 @@ async function collectTicketMessages(
     };
 
     if (lastId) {
-      options.before = lastId;
+      options.before =
+        lastId;
     }
 
     const batch =
@@ -525,7 +538,7 @@ async function collectTicketMessages(
       break;
     }
 
-    allMessages.push(
+    messages.push(
       ...batch.values()
     );
 
@@ -539,7 +552,98 @@ async function collectTicketMessages(
     }
   }
 
-  return allMessages;
+  return messages.sort(
+    (a, b) =>
+      a.createdTimestamp -
+      b.createdTimestamp
+  );
+}
+
+// ==================================================
+// RECOPILAR HILOS
+// ==================================================
+
+async function collectTicketThreads(
+  channel
+) {
+  const threads = [];
+
+  try {
+    const active =
+      await channel.threads.fetchActive();
+
+    for (
+      const thread of active.threads.values()
+    ) {
+      threads.push(
+        thread
+      );
+    }
+  } catch (error) {
+    console.error(
+      "⚠️ Error obteniendo hilos activos:",
+      error
+    );
+  }
+
+  try {
+    const archived =
+      await channel.threads.fetchArchived({
+        type: "public",
+        fetchAll: true,
+      });
+
+    for (
+      const thread of archived.threads.values()
+    ) {
+      if (
+        !threads.some(
+          (item) =>
+            item.id ===
+            thread.id
+        )
+      ) {
+        threads.push(
+          thread
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      "⚠️ Error obteniendo hilos archivados:",
+      error
+    );
+  }
+
+  const result = [];
+
+  for (
+    const thread of threads
+  ) {
+    try {
+      const messages =
+        await collectTicketMessages(
+          thread
+        );
+
+      result.push({
+        id:
+          thread.id,
+
+        name:
+          thread.name,
+
+        messages,
+      });
+    } catch (error) {
+      console.error(
+        `⚠️ Error recopilando hilo ${thread.id}:`,
+        error
+      );
+    }
+  }
+
+  return result;
 }
 
 // ==================================================
@@ -547,49 +651,54 @@ async function collectTicketMessages(
 // ==================================================
 
 async function claimTicket(
-  interaction,
-  ticketId
+  interaction
 ) {
   const ticket =
-    tickets.get(ticketId);
+    tickets.get(
+      interaction.channel.id
+    );
 
   if (!ticket) {
-    await interaction.reply({
+    return interaction.reply({
       content:
-        "Este ticket ya no existe.",
-      flags: MessageFlags.Ephemeral,
+        "❌ Este ticket no está registrado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
-
-    return;
   }
 
-  if (!isStaff(interaction)) {
-    await interaction.reply({
-      content:
-        "No tienes permiso para reclamar tickets.",
-      flags: MessageFlags.Ephemeral,
-    });
+  const member =
+    interaction.member;
 
-    return;
+  if (
+    !member.roles.cache.has(
+      config.roles.staff
+    )
+  ) {
+    return interaction.reply({
+      content:
+        "❌ Solo el Staff puede reclamar tickets.",
+      flags:
+        MessageFlags.Ephemeral,
+    });
   }
 
-  if (ticket.claimedBy) {
-    await interaction.reply({
+  if (
+    ticket.claimedBy
+  ) {
+    return interaction.reply({
       content:
-        `Este ticket ya fue reclamado por <@${ticket.claimedBy}>.`,
-      flags: MessageFlags.Ephemeral,
+        `❌ Este ticket ya fue reclamado por <@${ticket.claimedBy}>.`,
+      flags:
+        MessageFlags.Ephemeral,
     });
-
-    return;
   }
 
   ticket.claimedBy =
     interaction.user.id;
 
-  const channel =
-    interaction.channel;
-
-  await channel.permissionOverwrites.edit(
+  // Quitar acceso al Staff general
+  await interaction.channel.permissionOverwrites.edit(
     config.roles.staff,
     {
       ViewChannel: false,
@@ -598,51 +707,36 @@ async function claimTicket(
     }
   );
 
-  await channel.permissionOverwrites.edit(
-    ticket.userId,
-    {
-      ViewChannel: true,
-      SendMessages: true,
-      ReadMessageHistory: true,
-    }
-  );
-
-  await channel.permissionOverwrites.edit(
+  // Mantener acceso al Staff que reclamó
+  await interaction.channel.permissionOverwrites.edit(
     interaction.user.id,
     {
       ViewChannel: true,
       SendMessages: true,
       ReadMessageHistory: true,
+      AttachFiles: true,
+      EmbedLinks: true,
     }
   );
 
   const embed =
     new EmbedBuilder()
-      .setTitle(
-        `ticket reclamado ${config.emojis.claim}`
-      )
+      .setColor(0x5865f2)
       .setDescription(
-        `ahora <@${interaction.user.id}> sera el encargado de atenderte, por favor se paciente y trátalo con respeto`
-      )
-      .setColor(0xffd700)
-      .setTimestamp();
+        `<@${interaction.user.id}> ha reclamado este ticket.`
+      );
 
-  await channel.send({
+  await interaction.channel.send({
     content:
       `<@${ticket.userId}>`,
     embeds: [embed],
-
-    allowedMentions: {
-      users: [
-        ticket.userId,
-      ],
-    },
   });
 
   await interaction.reply({
     content:
-      `${config.emojis.claim} Ticket reclamado correctamente.`,
-    flags: MessageFlags.Ephemeral,
+      "✅ Has reclamado este ticket.",
+    flags:
+      MessageFlags.Ephemeral,
   });
 }
 
@@ -651,75 +745,75 @@ async function claimTicket(
 // ==================================================
 
 async function closeTicket(
-  interaction,
-  ticketId
+  interaction
 ) {
   const ticket =
-    tickets.get(ticketId);
+    tickets.get(
+      interaction.channel.id
+    );
 
   if (!ticket) {
-    await interaction.reply({
+    return interaction.reply({
       content:
-        "Este ticket ya no existe.",
-      flags: MessageFlags.Ephemeral,
+        "❌ Este ticket no está registrado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
-
-    return;
   }
 
-  if (!isStaff(interaction)) {
-    await interaction.reply({
+  // Solo Staff
+  if (
+    !interaction.member.roles.cache.has(
+      config.roles.staff
+    ) &&
+    interaction.user.id !==
+      ticket.claimedBy
+  ) {
+    return interaction.reply({
       content:
-        "❌ Solo el Staff puede cerrar tickets.",
-      flags: MessageFlags.Ephemeral,
+        "❌ Solo el Staff puede cerrar este ticket.",
+      flags:
+        MessageFlags.Ephemeral,
     });
-
-    return;
   }
 
-  const embed =
-    new EmbedBuilder()
-      .setTitle(
-        "¿Seguro que quieres borrar este ticket?"
+  const confirm =
+    new ButtonBuilder()
+      .setCustomId(
+        "ticket_confirm_close"
       )
-      .setColor(0xffd700);
+      .setLabel(
+        "Confirmar cierre"
+      )
+      .setStyle(
+        ButtonStyle.Danger
+      );
+
+  const cancel =
+    new ButtonBuilder()
+      .setCustomId(
+        "ticket_cancel_close"
+      )
+      .setLabel(
+        "Cancelar"
+      )
+      .setStyle(
+        ButtonStyle.Secondary
+      );
 
   const row =
     new ActionRowBuilder()
       .addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            `ticket_confirm_close:${ticketId}`
-          )
-          .setLabel(
-            "Sí, guardar y cerrar"
-          )
-          .setStyle(
-            ButtonStyle.Success
-          )
-          .setEmoji(
-            config.emojis.accept
-          ),
-
-        new ButtonBuilder()
-          .setCustomId(
-            `ticket_cancel_close:${ticketId}`
-          )
-          .setLabel(
-            "No, cancelar proceso"
-          )
-          .setStyle(
-            ButtonStyle.Danger
-          )
-          .setEmoji(
-            config.emojis.deny
-          )
+        confirm,
+        cancel
       );
 
   await interaction.reply({
-    embeds: [embed],
+    content:
+      "¿Estás seguro de que quieres cerrar este ticket?",
     components: [row],
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 }
 
@@ -732,198 +826,199 @@ async function cancelClose(
 ) {
   await interaction.update({
     content:
-      "El cierre del ticket fue cancelado.",
-    embeds: [],
+      "❌ Cierre cancelado.",
     components: [],
   });
 }
 
 // ==================================================
-// CERRAR DEFINITIVAMENTE
+// CONFIRMAR CIERRE
 // ==================================================
 
 async function confirmClose(
-  interaction,
-  ticketId
+  interaction
 ) {
-  const ticket =
-    tickets.get(ticketId);
-
-  if (!ticket) {
-    await interaction.update({
-      content:
-        "Este ticket ya no existe.",
-      embeds: [],
-      components: [],
-    });
-
-    return;
-  }
-
-  if (!isStaff(interaction)) {
-    await interaction.update({
-      content:
-        "❌ Solo el Staff puede cerrar tickets.",
-      embeds: [],
-      components: [],
-    });
-
-    return;
-  }
-
   const channel =
     interaction.channel;
 
-  // ==================================================
-  // RECOPILAR MENSAJES
-  // ==================================================
+  const ticket =
+    tickets.get(
+      channel.id
+    );
 
-  let messages = [];
+  if (!ticket) {
+    return interaction.update({
+      content:
+        "❌ Este ticket ya no existe.",
+      components: [],
+    });
+  }
+
+  await interaction.update({
+    content:
+      "⏳ Guardando la transcripción y cerrando el ticket...",
+    components: [],
+  });
 
   try {
-    messages =
+    // ==============================================
+    // OBTENER MENSAJES
+    // ==============================================
+
+    const messages =
       await collectTicketMessages(
         channel
       );
 
-    ticket.messages =
-      messages;
-  } catch (error) {
-    console.error(
-      "❌ Error recopilando mensajes del ticket:",
-      error
-    );
-  }
+    // ==============================================
+    // OBTENER HILOS
+    // ==============================================
 
-  // ==================================================
-  // GENERAR TRANSCRIPT
-  // ==================================================
-
-  let transcriptId = null;
-
-  try {
-    transcriptId =
-      saveTranscript(
-        ticket,
-        messages
+    const threads =
+      await collectTicketThreads(
+        channel
       );
-  } catch (error) {
-    console.error(
-      "❌ Error generando transcript:",
-      error
+
+    // ==============================================
+    // GUARDAR TRANSCRIPT
+    // ==============================================
+
+    await saveTranscript(
+      ticket,
+      messages,
+      threads,
+      interaction.guild
     );
-  }
 
-  // ==================================================
-  // MARCAR CERRADO
-  // ==================================================
+    // ==============================================
+    // URL
+    // ==============================================
 
-  ticket.status =
-    "closed";
+    let domain =
+      process.env
+        .RAILWAY_PUBLIC_DOMAIN;
 
-  await interaction.update({
-    content:
-      "💾 Guardando ticket y preparando el cierre...",
-    embeds: [],
-    components: [],
-  });
-
-  // ==================================================
-  // ENVIAR TRANSCRIPT
-  // ==================================================
-
-  if (transcriptId) {
-    try {
-      const transcriptChannel =
-        await interaction.client.channels.fetch(
-          config.channels.ticketTranscripts
-        );
-
-      if (transcriptChannel) {
-        const baseUrl =
-          process.env.RAILWAY_PUBLIC_DOMAIN
-            ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-            : null;
-
-        if (baseUrl) {
-          const transcriptUrl =
-            `${baseUrl}/transcript/${transcriptId}`;
-
-          const category =
-            getCategoryInfo(
-              ticket.type
-            );
-
-          const embed =
-            new EmbedBuilder()
-              .setTitle(
-                "📄 Ticket Transcript"
-              )
-              .setDescription(
-                `${category.emoji} **${category.name}**\n\n` +
-                `**Usuario:** <@${ticket.userId}>\n` +
-                `**Ticket ID:** \`${ticket.id}\`\n\n` +
-                `🔗 [Ver transcript](${transcriptUrl})`
-              )
-              .setColor(
-                0xffd700
-              )
-              .setTimestamp();
-
-          await transcriptChannel.send({
-            embeds: [embed],
-          });
-        } else {
-          await transcriptChannel.send({
-            content:
-              "⚠️ No se pudo generar el enlace del transcript porque Railway no tiene configurado RAILWAY_PUBLIC_DOMAIN.",
-          });
-        }
-      }
-    } catch (error) {
+    if (!domain) {
       console.error(
-        "❌ Error enviando transcript:",
-        error
+        "❌ RAILWAY_PUBLIC_DOMAIN no está configurado."
       );
     }
+
+    if (
+      domain &&
+      !domain.startsWith(
+        "http://"
+      ) &&
+      !domain.startsWith(
+        "https://"
+      )
+    ) {
+      domain =
+        `https://${domain}`;
+    }
+
+    const transcriptUrl =
+      domain
+        ? `${domain}/transcript/${ticket.id}`
+        : null;
+
+    // ==============================================
+    // ENVIAR TRANSCRIPT
+    // ==============================================
+
+    const transcriptChannel =
+      await interaction.guild.channels.fetch(
+        config.channels
+          .ticketTranscripts
+      );
+
+    if (
+      transcriptChannel &&
+      transcriptUrl
+    ) {
+      const embed =
+        new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle(
+            "📝 Ticket Transcript"
+          )
+          .setDescription(
+            `**Ticket:** \`${ticket.id}\`\n` +
+              `**Usuario:** <@${ticket.userId}>\n` +
+              `**Categoría:** ${
+                TICKET_TYPES[
+                  ticket.type
+                ]?.label ||
+                ticket.type
+              }\n` +
+              `**Staff:** ${
+                ticket.claimedBy
+                  ? `<@${ticket.claimedBy}>`
+                  : "No reclamado"
+              }`
+          )
+          .addFields({
+            name:
+              "Transcripción",
+            value:
+              `[Abrir transcripción](${transcriptUrl})`,
+          })
+          .setTimestamp();
+
+      await transcriptChannel.send({
+        embeds: [embed],
+      });
+    }
+
+    // ==============================================
+    // LOG
+    // ==============================================
+
+    await sendTicketLog(
+      interaction,
+      ticket,
+      transcriptUrl
+    );
+
+    // ==============================================
+    // ELIMINAR REGISTRO
+    // ==============================================
+
+    tickets.delete(
+      channel.id
+    );
+
+    // ==============================================
+    // BORRAR CANAL
+    // ==============================================
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          2000
+        )
+    );
+
+    await channel.delete(
+      "Ticket cerrado"
+    );
+
+  } catch (error) {
+    console.error(
+      "❌ Error cerrando ticket:",
+      error
+    );
+
+    try {
+      await interaction.followUp({
+        content:
+          "❌ Ocurrió un error al crear la transcripción. El ticket no fue eliminado.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+    } catch {}
   }
-
-  // ==================================================
-  // LOG
-  // ==================================================
-
-  await sendTicketLog(
-    interaction.client,
-    ticket
-  );
-
-  // ==================================================
-  // ELIMINAR DE MEMORIA
-  // ==================================================
-
-  tickets.delete(
-    ticketId
-  );
-
-  // ==================================================
-  // ELIMINAR CANAL
-  // ==================================================
-
-  setTimeout(
-    async () => {
-      try {
-        await channel.delete(
-          "Ticket cerrado"
-        );
-      } catch (error) {
-        console.error(
-          "❌ Error eliminando ticket:",
-          error
-        );
-      }
-    },
-    2000
-  );
 }
 
 // ==================================================
@@ -931,53 +1026,55 @@ async function confirmClose(
 // ==================================================
 
 async function sendTicketLog(
-  client,
-  ticket
+  interaction,
+  ticket,
+  transcriptUrl
 ) {
   try {
-    const channel =
-      await client.channels.fetch(
-        config.channels.ticketLogs
+    const logChannel =
+      await interaction.guild.channels.fetch(
+        config.channels
+          .ticketLogs
       );
 
-    if (!channel) {
+    if (!logChannel) {
       return;
     }
 
-    const category =
-      getCategoryInfo(
-        ticket.type
-      );
-
     const embed =
       new EmbedBuilder()
+        .setColor(0xed4245)
         .setTitle(
           "🎫 Ticket cerrado"
         )
-        .setColor(
-          0xed4245
-        )
         .addFields(
           {
-            name: "Ticket ID",
+            name:
+              "Ticket",
             value:
               `\`${ticket.id}\``,
             inline: true,
           },
           {
-            name: "Usuario",
+            name:
+              "Usuario",
             value:
               `<@${ticket.userId}>`,
             inline: true,
           },
           {
-            name: "Categoría",
+            name:
+              "Categoría",
             value:
-              `${category.emoji} ${category.name}`,
+              TICKET_TYPES[
+                ticket.type
+              ]?.label ||
+              ticket.type,
             inline: true,
           },
           {
-            name: "Staff",
+            name:
+              "Staff",
             value:
               ticket.claimedBy
                 ? `<@${ticket.claimedBy}>`
@@ -987,38 +1084,48 @@ async function sendTicketLog(
         )
         .setTimestamp();
 
-    await channel.send({
+    if (transcriptUrl) {
+      embed.addFields({
+        name:
+          "Transcripción",
+        value:
+          `[Abrir transcript](${transcriptUrl})`,
+      });
+    }
+
+    await logChannel.send({
       embeds: [embed],
     });
+
   } catch (error) {
     console.error(
-      "❌ Error enviando log de ticket:",
+      "❌ Error enviando log:",
       error
     );
   }
 }
 
 // ==================================================
-// MANEJADOR PRINCIPAL
+// MANEJAR INTERACCIONES
 // ==================================================
 
 async function handleTicketInteraction(
   interaction
 ) {
-  // ==================================================
+  // ==============================================
   // SELECTOR PRINCIPAL
-  // ==================================================
+  // ==============================================
 
   if (
     interaction.isStringSelectMenu() &&
     interaction.customId ===
       "ticket_category"
   ) {
-    const type =
+    const value =
       interaction.values[0];
 
     if (
-      type ===
+      value ===
       "general_support"
     ) {
       await showGeneralSupportModal(
@@ -1029,18 +1136,7 @@ async function handleTicketInteraction(
     }
 
     if (
-      type ===
-      "report_bugs"
-    ) {
-      await showBugMenu(
-        interaction
-      );
-
-      return true;
-    }
-
-    if (
-      type ===
+      value ===
       "get_help"
     ) {
       await showGetHelpModal(
@@ -1051,67 +1147,62 @@ async function handleTicketInteraction(
     }
 
     if (
-      type ===
+      value ===
+      "report_bugs"
+    ) {
+      await showBugMenu(
+        interaction
+      );
+
+      return true;
+    }
+
+    if (
+      value ===
       "other"
     ) {
-      await createTicket(
-        interaction,
-        "other"
+      const modal =
+        new ModalBuilder()
+          .setCustomId(
+            "ticket_modal_other"
+          )
+          .setTitle(
+            "Other"
+          );
+
+      const input =
+        new TextInputBuilder()
+          .setCustomId(
+            "ticket_reason"
+          )
+          .setLabel(
+            "¿En qué podemos ayudarte?"
+          )
+          .setStyle(
+            TextInputStyle.Paragraph
+          )
+          .setRequired(true)
+          .setMaxLength(
+            1000
+          );
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          input
+        )
+      );
+
+      await interaction.showModal(
+        modal
       );
 
       return true;
     }
   }
 
-  // ==================================================
-  // MODAL GENERAL SUPPORT
-  // ==================================================
-
-  if (
-    interaction.isModalSubmit() &&
-    interaction.customId ===
-      "ticket_general_support_modal"
-  ) {
-    const question =
-      interaction.fields.getTextInputValue(
-        "ticket_question"
-      );
-
-    await createTicket(
-      interaction,
-      "general_support",
-      question
-    );
-
-    return true;
-  }
-
-  // ==================================================
-  // MODAL GET HELP
-  // ==================================================
-
-  if (
-    interaction.isModalSubmit() &&
-    interaction.customId ===
-      "ticket_get_help_modal"
-  ) {
-    const question =
-      interaction.fields.getTextInputValue(
-        "ticket_question"
-      );
-
-    await createTicket(
-      interaction,
-      "get_help",
-      question
-    );
-
-    return true;
-  }
-
-  // ==================================================
-  // SELECTOR DE BUGS
-  // ==================================================
+  // ==============================================
+  // BUG SELECTOR
+  // ==============================================
 
   if (
     interaction.isStringSelectMenu() &&
@@ -1121,100 +1212,178 @@ async function handleTicketInteraction(
     const bugType =
       interaction.values[0];
 
-    await createTicket(
-      interaction,
-      "report_bugs",
-      null,
-      bugType
+    const modal =
+      new ModalBuilder()
+        .setCustomId(
+          `ticket_modal_bug_${bugType}`
+        )
+        .setTitle(
+          "Report Bugs"
+        );
+
+    const input =
+      new TextInputBuilder()
+        .setCustomId(
+          "ticket_reason"
+        )
+        .setLabel(
+          "Describe el bug"
+        )
+        .setStyle(
+          TextInputStyle.Paragraph
+        )
+        .setRequired(true)
+        .setMaxLength(
+          1500
+        )
+        .setPlaceholder(
+          "Explica qué ocurrió..."
+        );
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        input
+      )
+    );
+
+    await interaction.showModal(
+      modal
     );
 
     return true;
   }
 
-  // ==================================================
-  // RECLAMAR
-  // ==================================================
+  // ==============================================
+  // MODALES
+  // ==============================================
 
   if (
-    interaction.isButton() &&
-    interaction.customId.startsWith(
-      "ticket_claim:"
-    )
+    interaction.isModalSubmit()
   ) {
-    const ticketId =
-      interaction.customId.split(
-        ":"
-      )[1];
+    if (
+      interaction.customId ===
+      "ticket_modal_general"
+    ) {
+      const reason =
+        interaction.fields.getTextInputValue(
+          "ticket_reason"
+        );
 
-    await claimTicket(
-      interaction,
-      ticketId
-    );
+      await createTicket(
+        interaction,
+        "general_support",
+        reason
+      );
 
-    return true;
+      return true;
+    }
+
+    if (
+      interaction.customId ===
+      "ticket_modal_help"
+    ) {
+      const reason =
+        interaction.fields.getTextInputValue(
+          "ticket_reason"
+        );
+
+      await createTicket(
+        interaction,
+        "get_help",
+        reason
+      );
+
+      return true;
+    }
+
+    if (
+      interaction.customId ===
+      "ticket_modal_other"
+    ) {
+      const reason =
+        interaction.fields.getTextInputValue(
+          "ticket_reason"
+        );
+
+      await createTicket(
+        interaction,
+        "other",
+        reason
+      );
+
+      return true;
+    }
+
+    if (
+      interaction.customId.startsWith(
+        "ticket_modal_bug_"
+      )
+    ) {
+      const reason =
+        interaction.fields.getTextInputValue(
+          "ticket_reason"
+        );
+
+      await createTicket(
+        interaction,
+        "report_bugs",
+        reason
+      );
+
+      return true;
+    }
   }
 
-  // ==================================================
-  // CERRAR
-  // ==================================================
+  // ==============================================
+  // BOTONES
+  // ==============================================
 
   if (
-    interaction.isButton() &&
-    interaction.customId.startsWith(
-      "ticket_close:"
-    )
+    interaction.isButton()
   ) {
-    const ticketId =
-      interaction.customId.split(
-        ":"
-      )[1];
+    if (
+      interaction.customId ===
+      "ticket_claim"
+    ) {
+      await claimTicket(
+        interaction
+      );
 
-    await closeTicket(
-      interaction,
-      ticketId
-    );
+      return true;
+    }
 
-    return true;
-  }
+    if (
+      interaction.customId ===
+      "ticket_close"
+    ) {
+      await closeTicket(
+        interaction
+      );
 
-  // ==================================================
-  // CONFIRMAR CIERRE
-  // ==================================================
+      return true;
+    }
 
-  if (
-    interaction.isButton() &&
-    interaction.customId.startsWith(
-      "ticket_confirm_close:"
-    )
-  ) {
-    const ticketId =
-      interaction.customId.split(
-        ":"
-      )[1];
+    if (
+      interaction.customId ===
+      "ticket_cancel_close"
+    ) {
+      await cancelClose(
+        interaction
+      );
 
-    await confirmClose(
-      interaction,
-      ticketId
-    );
+      return true;
+    }
 
-    return true;
-  }
+    if (
+      interaction.customId ===
+      "ticket_confirm_close"
+    ) {
+      await confirmClose(
+        interaction
+      );
 
-  // ==================================================
-  // CANCELAR CIERRE
-  // ==================================================
-
-  if (
-    interaction.isButton() &&
-    interaction.customId.startsWith(
-      "ticket_cancel_close:"
-    )
-  ) {
-    await cancelClose(
-      interaction
-    );
-
-    return true;
+      return true;
+    }
   }
 
   return false;
@@ -1227,4 +1396,6 @@ async function handleTicketInteraction(
 module.exports = {
   sendTicketsPanel,
   handleTicketInteraction,
+  collectTicketMessages,
+  collectTicketThreads,
 };
