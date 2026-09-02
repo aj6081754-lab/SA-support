@@ -2,7 +2,6 @@ const {
   Client,
   GatewayIntentBits,
   Events,
-  MessageFlags,
 } = require("discord.js");
 
 const config = require("./config");
@@ -17,6 +16,14 @@ const {
   handleTicketInteraction,
 } = require("./tickets");
 
+const {
+  startTranscriptServer,
+} = require("./transcripts");
+
+// ==================================================
+// CLIENTE DISCORD
+// ==================================================
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -26,81 +33,102 @@ const client = new Client({
 });
 
 // ==================================================
+// SERVIDOR WEB DE TRANSCRIPCIONES
+// ==================================================
+
+startTranscriptServer();
+
+// ==================================================
 // BOT LISTO
 // ==================================================
 
-client.once(Events.ClientReady, async (readyClient) => {
-  console.log(
-    `✅ ${readyClient.user.tag} está conectado.`
-  );
-
-  console.log(
-    `🌐 Servidores: ${readyClient.guilds.cache.size}`
-  );
-
-  const supportGuild =
-    readyClient.guilds.cache.get(
-      config.supportGuildId
+client.once(
+  Events.ClientReady,
+  async (readyClient) => {
+    console.log(
+      `✅ ${readyClient.user.tag} está conectado.`
     );
 
-  if (!supportGuild) {
-    console.error(
-      "❌ El bot no está en el servidor de soporte configurado."
+    console.log(
+      `🌐 Servidores: ${readyClient.guilds.cache.size}`
     );
 
-    return;
+    const supportGuild =
+      readyClient.guilds.cache.get(
+        config.supportGuildId
+      );
+
+    if (!supportGuild) {
+      console.error(
+        "❌ El bot no está en el servidor de soporte configurado."
+      );
+
+      return;
+    }
+
+    console.log(
+      `🏠 Servidor de soporte: ${supportGuild.name}`
+    );
+
+    // ==================================================
+    // SUGERENCIAS
+    // ==================================================
+
+    console.log(
+      `💡 Panel de sugerencias: ${config.channels.suggestionsPanel}`
+    );
+
+    console.log(
+      `🗳️ Canal de sugerencias: ${config.channels.suggestions}`
+    );
+
+    // ==================================================
+    // TICKETS
+    // ==================================================
+
+    console.log(
+      `🎫 Panel de tickets: ${config.channels.ticketsPanel}`
+    );
+
+    console.log(
+      `📝 Ticket transcripts: ${config.channels.ticketTranscripts}`
+    );
+
+    console.log(
+      `📋 Ticket logs: ${config.channels.ticketLogs}`
+    );
+
+    // ==================================================
+    // ENVIAR PANEL DE SUGERENCIAS
+    // ==================================================
+
+    try {
+      await sendSuggestionsPanel(
+        readyClient
+      );
+    } catch (error) {
+      console.error(
+        "❌ Error enviando el panel de sugerencias:",
+        error
+      );
+    }
+
+    // ==================================================
+    // ENVIAR PANEL DE TICKETS
+    // ==================================================
+
+    try {
+      await sendTicketsPanel(
+        readyClient
+      );
+    } catch (error) {
+      console.error(
+        "❌ Error enviando el panel de tickets:",
+        error
+      );
+    }
   }
-
-  console.log(
-    `🏠 Servidor de soporte: ${supportGuild.name}`
-  );
-
-  console.log(
-    `💡 Panel de sugerencias: ${config.channels.suggestionsPanel}`
-  );
-
-  console.log(
-    `🗳️ Canal de sugerencias: ${config.channels.suggestions}`
-  );
-
-  console.log(
-    `🎫 Panel de tickets: ${config.channels.ticketsPanel}`
-  );
-
-  console.log(
-    `📄 Canal de transcripciones: ${config.channels.ticketTranscripts}`
-  );
-
-  console.log(
-    `📋 Canal de logs: ${config.channels.ticketLogs}`
-  );
-
-  // ==================================================
-  // PANEL DE SUGERENCIAS
-  // ==================================================
-
-  try {
-    await sendSuggestionsPanel(readyClient);
-  } catch (error) {
-    console.error(
-      "❌ Error enviando el panel de sugerencias:",
-      error
-    );
-  }
-
-  // ==================================================
-  // PANEL DE TICKETS
-  // ==================================================
-
-  try {
-    await sendTicketsPanel(readyClient);
-  } catch (error) {
-    console.error(
-      "❌ Error enviando el panel de tickets:",
-      error
-    );
-  }
-});
+);
 
 // ==================================================
 // INTERACCIONES
@@ -150,7 +178,7 @@ client.on(
           await interaction.reply({
             content:
               "❌ Ocurrió un error al procesar esta acción.",
-            flags: MessageFlags.Ephemeral,
+            flags: 64,
           });
         } catch (replyError) {
           console.error(
