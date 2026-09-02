@@ -10,6 +10,8 @@ const {
   ChannelType,
   PermissionFlagsBits,
   MessageFlags,
+  ContainerBuilder,
+  TextDisplayBuilder,
 } = require("discord.js");
 
 const config = require("./config");
@@ -54,6 +56,14 @@ function getCategoryInfo(type) {
   return categories[type];
 }
 
+function isStaff(interaction) {
+  return (
+    interaction.member?.roles?.cache?.has(
+      config.roles.staff
+    ) || false
+  );
+}
+
 // ==================================================
 // PANEL PRINCIPAL
 // ==================================================
@@ -69,30 +79,6 @@ async function sendTicketsPanel(client) {
     );
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle(
-      `SA Support tickets ${config.emojis.getHelp}`
-    )
-    .setDescription(
-      `**${config.emojis.generalSupport} General Support**\n` +
-        `- Get Support from the staff team\n` +
-        `-# questions about the bot goes in get help\n\n` +
-
-        `**${config.emojis.reportBugs} Report Bugs**\n` +
-        `- Report bot, server or support bot bugs\n\n` +
-
-        `**${config.emojis.getHelp} Get Help**\n` +
-        `- Get help to config bot, answer your questions and other things related\n\n` +
-
-        `**${config.emojis.other} Other**\n` +
-        `- any panel describes your problem? Open this ticket tu get support\n\n` +
-
-        `-# Joke tickets can be Sanctioned ${config.emojis.reportBugs}`
-    )
-    .setColor(0xffd700);
-
-  // IMPORTANTE:
-  // El menú está dentro del embed mediante el mismo mensaje.
   const menu = new StringSelectMenuBuilder()
     .setCustomId("ticket_category")
     .setPlaceholder("Select a ticket type")
@@ -123,7 +109,39 @@ async function sendTicketsPanel(client) {
       }
     );
 
-  const row = new ActionRowBuilder().addComponents(menu);
+  const row = new ActionRowBuilder().addComponents(
+    menu
+  );
+
+  // ==================================================
+  // COMPONENTS V2
+  // ==================================================
+
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `# SA Support tickets ${config.emojis.getHelp}`
+      )
+    )
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `**${config.emojis.generalSupport} General Support**\n` +
+          `Get Support from the staff team\n` +
+          `-# questions about the bot goes in get help\n\n` +
+
+          `**${config.emojis.reportBugs} Report Bugs**\n` +
+          `Report bot, server or support bot bugs\n\n` +
+
+          `**${config.emojis.getHelp} Get Help**\n` +
+          `Get help to config bot, answer your questions and other things related\n\n` +
+
+          `**${config.emojis.other} Other**\n` +
+          `any panel describes your problem? Open this ticket tu get support\n\n` +
+
+          `-# Joke tickets can be Sanctioned ${config.emojis.reportBugs}`
+      )
+    )
+    .addActionRowComponents(row);
 
   const messages = await channel.messages.fetch({
     limit: 50,
@@ -132,11 +150,9 @@ async function sendTicketsPanel(client) {
   const existing = messages.find(
     (message) =>
       message.author.id === client.user.id &&
-      message.components.some((componentRow) =>
-        componentRow.components.some(
-          (component) =>
-            component.customId === "ticket_category"
-        )
+      message.flags.has(MessageFlags.IsComponentsV2) &&
+      message.components.some((component) =>
+        component.type === 17
       )
   );
 
@@ -145,8 +161,8 @@ async function sendTicketsPanel(client) {
   }
 
   return await channel.send({
-    embeds: [embed],
-    components: [row],
+    components: [container],
+    flags: MessageFlags.IsComponentsV2,
   });
 }
 
@@ -243,7 +259,8 @@ async function showBugMenu(interaction) {
   );
 
   await interaction.reply({
-    content: "Select the type of bug you want to report.",
+    content:
+      "Select the type of bug you want to report.",
     components: [row],
     flags: MessageFlags.Ephemeral,
   });
@@ -265,7 +282,10 @@ async function createTicket(
     return;
   }
 
-  // Evitar múltiples tickets del mismo usuario
+  // ==================================================
+  // COMPROBAR SI YA TIENE TICKET
+  // ==================================================
+
   const existingTicket = [...tickets.values()].find(
     (ticket) =>
       ticket.userId === interaction.user.id &&
@@ -297,6 +317,10 @@ async function createTicket(
       config.roles.staff
     );
 
+  // ==================================================
+  // PERMISOS INICIALES
+  // ==================================================
+
   const permissionOverwrites = [
     {
       id: guild.id,
@@ -305,6 +329,7 @@ async function createTicket(
       ],
     },
 
+    // CREADOR
     {
       id: interaction.user.id,
       allow: [
@@ -314,6 +339,7 @@ async function createTicket(
       ],
     },
 
+    // BOT
     {
       id: interaction.client.user.id,
       allow: [
@@ -326,6 +352,7 @@ async function createTicket(
     },
   ];
 
+  // STAFF
   if (staffRole) {
     permissionOverwrites.push({
       id: staffRole.id,
@@ -337,6 +364,10 @@ async function createTicket(
     });
   }
 
+  // ==================================================
+  // CREAR CANAL
+  // ==================================================
+
   const channel =
     await guild.channels.create({
       name: channelName,
@@ -344,32 +375,27 @@ async function createTicket(
       permissionOverwrites,
     });
 
+  // ==================================================
+  // GUARDAR TICKET
+  // ==================================================
+
   const ticket = {
     id: ticketId,
-
     channelId: channel.id,
-
     userId: interaction.user.id,
-
     claimedBy: null,
-
     type,
-
     question,
-
     bugType,
-
     status: "open",
-
     createdAt: Date.now(),
-
     messages: [],
   };
 
   tickets.set(ticketId, ticket);
 
   // ==================================================
-  // EMBED
+  // EMBED DEL TICKET
   // ==================================================
 
   const embed = new EmbedBuilder()
@@ -384,12 +410,13 @@ async function createTicket(
         `id: \`${interaction.user.id}\`\n\n` +
 
         `**Questions:**\n` +
-
         (
           question
-            ? `**1.** ${type === "get_help"
-                ? "¿Cuál es tu duda?"
-                : "¿Que necesitas?"}\n` +
+            ? `**1.** ${
+                type === "get_help"
+                  ? "¿Cuál es tu duda?"
+                  : "¿Que necesitas?"
+              }\n` +
               `> ${question}`
             : bugType
               ? `**1.** Bug type\n` +
@@ -399,6 +426,10 @@ async function createTicket(
     )
     .setColor(0xffd700)
     .setTimestamp();
+
+  // ==================================================
+  // BOTONES
+  // ==================================================
 
   const buttons =
     new ActionRowBuilder().addComponents(
@@ -419,16 +450,42 @@ async function createTicket(
         .setEmoji(config.emojis.close)
     );
 
+  // ==================================================
+  // MENSAJE PRINCIPAL
+  // STAFF + CREADOR + EMBED EN EL MISMO MENSAJE
+  // ==================================================
+
+  const mentions =
+    staffRole
+      ? `<@&${staffRole.id}> <@${interaction.user.id}>`
+      : `<@${interaction.user.id}>`;
+
   await channel.send({
+    content: mentions,
+
     embeds: [embed],
+
     components: [buttons],
+
+    allowedMentions: {
+      roles: staffRole
+        ? [staffRole.id]
+        : [],
+      users: [
+        interaction.user.id,
+      ],
+    },
   });
 
-  await channel.send(
-    `<@${interaction.user.id}> Tu ticket ha sido creado.`
-  );
+  // ==================================================
+  // RESPUESTA AL USUARIO
+  // ==================================================
 
-  if (!interaction.replied) {
+  if (
+    interaction.isRepliable() &&
+    !interaction.replied &&
+    !interaction.deferred
+  ) {
     await interaction.reply({
       content:
         `${category.emoji} Tu ticket fue creado: <#${channel.id}>`,
@@ -457,14 +514,11 @@ async function claimTicket(
     return;
   }
 
-  const member =
-    interaction.member;
+  // ==================================================
+  // SOLO STAFF PUEDE RECLAMAR
+  // ==================================================
 
-  if (
-    !member.roles.cache.has(
-      config.roles.staff
-    )
-  ) {
+  if (!isStaff(interaction)) {
     await interaction.reply({
       content:
         "No tienes permiso para reclamar tickets.",
@@ -473,6 +527,10 @@ async function claimTicket(
 
     return;
   }
+
+  // ==================================================
+  // COMPROBAR SI YA ESTÁ RECLAMADO
+  // ==================================================
 
   if (ticket.claimedBy) {
     await interaction.reply({
@@ -491,7 +549,7 @@ async function claimTicket(
     interaction.channel;
 
   // ==================================================
-  // PERMISOS
+  // QUITAR ACCESO AL STAFF GENERAL
   // ==================================================
 
   await channel.permissionOverwrites.edit(
@@ -503,6 +561,10 @@ async function claimTicket(
     }
   );
 
+  // ==================================================
+  // CREADOR
+  // ==================================================
+
   await channel.permissionOverwrites.edit(
     ticket.userId,
     {
@@ -511,6 +573,10 @@ async function claimTicket(
       ReadMessageHistory: true,
     }
   );
+
+  // ==================================================
+  // STAFF QUE RECLAMÓ
+  // ==================================================
 
   await channel.permissionOverwrites.edit(
     interaction.user.id,
@@ -522,7 +588,7 @@ async function claimTicket(
   );
 
   // ==================================================
-  // EMBED DE RECLAMADO
+  // EMBED DE TICKET RECLAMADO
   // ==================================================
 
   const embed = new EmbedBuilder()
@@ -535,10 +601,24 @@ async function claimTicket(
     .setColor(0xffd700)
     .setTimestamp();
 
+  // ==================================================
+  // CREATOR PING + EMBED EN EL MISMO MENSAJE
+  // ==================================================
+
   await channel.send({
     content: `<@${ticket.userId}>`,
     embeds: [embed],
+
+    allowedMentions: {
+      users: [
+        ticket.userId,
+      ],
+    },
   });
+
+  // ==================================================
+  // RESPUESTA AL STAFF
+  // ==================================================
 
   await interaction.reply({
     content:
@@ -567,8 +647,24 @@ async function closeTicket(
     return;
   }
 
+  // ==================================================
+  // SOLO STAFF PUEDE CERRAR
+  // ==================================================
+
+  if (!isStaff(interaction)) {
+    await interaction.reply({
+      content:
+        "❌ Solo el Staff puede cerrar tickets.",
+      flags: MessageFlags.Ephemeral,
+    });
+
+    return;
+  }
+
   const embed = new EmbedBuilder()
-    .setTitle("¿Seguro que quieres borrar este ticket?")
+    .setTitle(
+      "¿Seguro que quieres borrar este ticket?"
+    )
     .setColor(0xffd700);
 
   const row =
@@ -633,10 +729,23 @@ async function confirmClose(
     return;
   }
 
-  ticket.status = "closed";
+  // ==================================================
+  // SEGURIDAD:
+  // VOLVER A COMPROBAR STAFF
+  // ==================================================
 
-  // El sistema de transcripción web
-  // se conectará aquí posteriormente.
+  if (!isStaff(interaction)) {
+    await interaction.update({
+      content:
+        "❌ Solo el Staff puede cerrar tickets.",
+      embeds: [],
+      components: [],
+    });
+
+    return;
+  }
+
+  ticket.status = "closed";
 
   await interaction.update({
     content:
@@ -645,12 +754,20 @@ async function confirmClose(
     components: [],
   });
 
+  // ==================================================
+  // LOG
+  // ==================================================
+
   await sendTicketLog(
     interaction.client,
     ticket
   );
 
   tickets.delete(ticketId);
+
+  // ==================================================
+  // ELIMINAR CANAL
+  // ==================================================
 
   setTimeout(async () => {
     try {
@@ -734,9 +851,9 @@ async function sendTicketLog(
 async function handleTicketInteraction(
   interaction
 ) {
-  // ------------------------------------------
+  // ==================================================
   // SELECTOR PRINCIPAL
-  // ------------------------------------------
+  // ==================================================
 
   if (
     interaction.isStringSelectMenu() &&
@@ -780,9 +897,9 @@ async function handleTicketInteraction(
     }
   }
 
-  // ------------------------------------------
-  // MODAL GENERAL
-  // ------------------------------------------
+  // ==================================================
+  // MODAL GENERAL SUPPORT
+  // ==================================================
 
   if (
     interaction.isModalSubmit() &&
@@ -803,9 +920,9 @@ async function handleTicketInteraction(
     return true;
   }
 
-  // ------------------------------------------
+  // ==================================================
   // MODAL GET HELP
-  // ------------------------------------------
+  // ==================================================
 
   if (
     interaction.isModalSubmit() &&
@@ -826,9 +943,9 @@ async function handleTicketInteraction(
     return true;
   }
 
-  // ------------------------------------------
-  // BUG TYPE
-  // ------------------------------------------
+  // ==================================================
+  // SELECTOR DE BUGS
+  // ==================================================
 
   if (
     interaction.isStringSelectMenu() &&
@@ -848,9 +965,9 @@ async function handleTicketInteraction(
     return true;
   }
 
-  // ------------------------------------------
+  // ==================================================
   // RECLAMAR
-  // ------------------------------------------
+  // ==================================================
 
   if (
     interaction.isButton() &&
@@ -869,9 +986,9 @@ async function handleTicketInteraction(
     return true;
   }
 
-  // ------------------------------------------
+  // ==================================================
   // CERRAR
-  // ------------------------------------------
+  // ==================================================
 
   if (
     interaction.isButton() &&
@@ -890,9 +1007,9 @@ async function handleTicketInteraction(
     return true;
   }
 
-  // ------------------------------------------
+  // ==================================================
   // CONFIRMAR CIERRE
-  // ------------------------------------------
+  // ==================================================
 
   if (
     interaction.isButton() &&
@@ -911,9 +1028,9 @@ async function handleTicketInteraction(
     return true;
   }
 
-  // ------------------------------------------
+  // ==================================================
   // CANCELAR CIERRE
-  // ------------------------------------------
+  // ==================================================
 
   if (
     interaction.isButton() &&
