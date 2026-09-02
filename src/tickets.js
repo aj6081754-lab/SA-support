@@ -462,7 +462,7 @@ async function createTicket(
         `id: \`${interaction.user.id}\`\n\n` +
 
         `**Questions:**\n\n` +
-        `1.${reason}`
+        `${reason}`
       );
 
   // ==================================================

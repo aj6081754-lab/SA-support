@@ -731,6 +731,8 @@ function createTranscriptHTML(
   // MENSAJES
   // ==================================================
 
+  let lastMessageDate = null;
+
   const messagesHTML =
     preparedMessages
       .map(
@@ -740,6 +742,70 @@ function createTranscriptHTML(
               message.content,
               guild
             );
+
+          // ==================================================
+          // FECHA DEL MENSAJE
+          // ==================================================
+
+          let dateSeparator = "";
+
+          if (
+            message.createdTimestamp
+          ) {
+            const messageDate =
+              new Date(
+                message.createdTimestamp
+              );
+
+            const dateKey =
+              messageDate.toLocaleDateString(
+                "es-MX",
+                {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                }
+              );
+
+            if (
+              dateKey !==
+              lastMessageDate
+            ) {
+              lastMessageDate =
+                dateKey;
+
+              const formattedDate =
+                messageDate.toLocaleDateString(
+                  "es-MX",
+                  {
+                    weekday:
+                      "long",
+                    day:
+                      "numeric",
+                    month:
+                      "long",
+                    year:
+                      "numeric",
+                  }
+                );
+
+              dateSeparator = `
+                <div class="date-separator">
+
+                  <div class="date-line"></div>
+
+                  <div class="date-text">
+                    ${escapeHTML(
+                      formattedDate
+                    )}
+                  </div>
+
+                  <div class="date-line"></div>
+
+                </div>
+              `;
+            }
+          }
 
           const replyHTML =
             message.reply
@@ -951,6 +1017,8 @@ function createTranscriptHTML(
           `;
 
           return `
+            ${dateSeparator}
+
             <div
               class="message"
               id="message-${escapeHTML(
@@ -1227,7 +1295,45 @@ body {
     sans-serif;
 }
 
-/* ==========================================
+/* 
+/* 
+==========================================
+   SEPARADORES DE FECHA
+   ========================================== */
+
+.date-separator {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  margin:
+    18px 16px 10px;
+}
+
+.date-line {
+  flex: 1;
+
+  height: 1px;
+
+  background: #4e5058;
+}
+
+.date-text {
+  color: #949ba4;
+
+  font-size: 12px;
+
+  font-weight: 600;
+
+  white-space: nowrap;
+
+  text-transform:
+    capitalize;
+}
+
+==========================================
    PANEL
    ========================================== */
 
