@@ -2,6 +2,7 @@ const {
   Client,
   GatewayIntentBits,
   Events,
+  MessageFlags,
 } = require("discord.js");
 
 const config = require("./config");
@@ -10,6 +11,11 @@ const {
   sendSuggestionsPanel,
   handleSuggestionInteraction,
 } = require("./suggestions");
+
+const {
+  sendTicketsPanel,
+  handleTicketInteraction,
+} = require("./tickets");
 
 const client = new Client({
   intents: [
@@ -41,6 +47,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.error(
       "❌ El bot no está en el servidor de soporte configurado."
     );
+
     return;
   }
 
@@ -60,12 +67,36 @@ client.once(Events.ClientReady, async (readyClient) => {
     `🎫 Panel de tickets: ${config.channels.ticketsPanel}`
   );
 
-  // Enviar panel de sugerencias
+  console.log(
+    `📄 Canal de transcripciones: ${config.channels.ticketTranscripts}`
+  );
+
+  console.log(
+    `📋 Canal de logs: ${config.channels.ticketLogs}`
+  );
+
+  // ==================================================
+  // PANEL DE SUGERENCIAS
+  // ==================================================
+
   try {
     await sendSuggestionsPanel(readyClient);
   } catch (error) {
     console.error(
       "❌ Error enviando el panel de sugerencias:",
+      error
+    );
+  }
+
+  // ==================================================
+  // PANEL DE TICKETS
+  // ==================================================
+
+  try {
+    await sendTicketsPanel(readyClient);
+  } catch (error) {
+    console.error(
+      "❌ Error enviando el panel de tickets:",
       error
     );
   }
@@ -79,12 +110,29 @@ client.on(
   Events.InteractionCreate,
   async (interaction) => {
     try {
-      const handled =
+      // ==================================================
+      // SUGERENCIAS
+      // ==================================================
+
+      const suggestionHandled =
         await handleSuggestionInteraction(
           interaction
         );
 
-      if (handled) {
+      if (suggestionHandled) {
+        return;
+      }
+
+      // ==================================================
+      // TICKETS
+      // ==================================================
+
+      const ticketHandled =
+        await handleTicketInteraction(
+          interaction
+        );
+
+      if (ticketHandled) {
         return;
       }
     } catch (error) {
@@ -98,11 +146,18 @@ client.on(
         !interaction.replied &&
         !interaction.deferred
       ) {
-        await interaction.reply({
-          content:
-            "❌ Ocurrió un error al procesar esta acción.",
-          ephemeral: true,
-        });
+        try {
+          await interaction.reply({
+            content:
+              "❌ Ocurrió un error al procesar esta acción.",
+            flags: MessageFlags.Ephemeral,
+          });
+        } catch (replyError) {
+          console.error(
+            "❌ No se pudo enviar el mensaje de error:",
+            replyError
+          );
+        }
       }
     }
   }
@@ -112,4 +167,6 @@ client.on(
 // LOGIN
 // ==================================================
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(
+  process.env.DISCORD_TOKEN
+);
