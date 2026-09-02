@@ -306,6 +306,148 @@ async function showBugMenu(
 }
 
 // ==================================================
+// LOG GENÉRICO
+// ==================================================
+
+async function sendTicketLog(
+  guild,
+  type,
+  ticket,
+  extra = {}
+) {
+  try {
+    const logChannel =
+      await guild.channels.fetch(
+        config.channels.ticketLogs
+      );
+
+    if (!logChannel) {
+      return;
+    }
+
+    let color =
+      0x5865f2;
+
+    let title =
+      "🎫 Ticket";
+
+    if (type === "open") {
+      color =
+        0x57f287;
+
+      title =
+        "✅ Ticket abierto";
+    }
+
+    if (type === "claim") {
+      color =
+        0x5865f2;
+
+      title =
+        "🔒 Ticket reclamado";
+    }
+
+    if (type === "reopen") {
+      color =
+        0xfee75c;
+
+      title =
+        "🔓 Reclamacion removida";
+    }
+
+    if (type === "close") {
+      color =
+        0xed4245;
+
+      title =
+        "🚫 Ticket cerrado";
+    }
+
+    if (type === "delete") {
+      color =
+        0x2b2d31;
+
+      title =
+        "🗑️ Ticket eliminado";
+    }
+
+    const embed =
+      new EmbedBuilder()
+        .setColor(color)
+        .setTitle(title)
+        .addFields(
+          {
+            name:
+              "Ticket",
+            value:
+              `\`${ticket.id}\``,
+            inline: true,
+          },
+          {
+            name:
+              "Usuario",
+            value:
+              `<@${ticket.userId}>`,
+            inline: true,
+          },
+          {
+            name:
+              "Categoría",
+            value:
+              TICKET_TYPES[
+                ticket.type
+              ]?.label ||
+              ticket.type,
+            inline: true,
+          },
+          {
+            name:
+              "Staff",
+            value:
+              ticket.claimedBy
+                ? `<@${ticket.claimedBy}>`
+                : "No reclamado",
+            inline: true,
+          }
+        )
+        .setTimestamp();
+
+    if (
+      extra.actorId
+    ) {
+      embed.addFields({
+        name:
+          "Acción realizada por",
+        value:
+          `<@${extra.actorId}>`,
+        inline: true,
+      });
+    }
+
+    if (
+      extra.transcriptUrl
+    ) {
+      embed.addFields({
+        name:
+          "Transcripción",
+        value:
+          `[Abrir transcript](${extra.transcriptUrl})`,
+      });
+    }
+
+    await logChannel.send({
+      embeds: [embed],
+    });
+
+  } catch (error) {
+    console.error(
+      "❌ Error enviando log:",
+      error
+    );
+  }
+}
+
+// ==================================================
 // CREAR TICKET
 // ==================================================
 
@@ -437,6 +579,9 @@ async function createTicket(
 
     createdAt:
       Date.now(),
+
+    closed:
+      false,
   };
 
   tickets.set(
@@ -514,6 +659,20 @@ async function createTicket(
 
     components: [row],
   });
+
+  // ==================================================
+  // LOG: TICKET ABIERTO
+  // ==================================================
+
+  await sendTicketLog(
+    guild,
+    "open",
+    ticket,
+    {
+      actorId:
+        interaction.user.id,
+    }
+  );
 
   await interaction.reply({
     content:
@@ -663,7 +822,128 @@ async function collectTicketThreads(
 }
 
 // ==================================================
-// RECLAMAR TICKET
+// ACTUALIZAR BOTÓN DE RECLAMAR
+// ==================================================
+
+async function updateClaimButton(
+  channel,
+  claimed
+) {
+  try {
+    const messages =
+      await channel.messages.fetch({
+        limit: 20,
+      });
+
+    const panelMessage =
+      messages.find(
+        (message) =>
+          message.author?.id ===
+            channel.client.user.id &&
+          message.components?.some(
+            (row) =>
+              row.components?.some(
+                (component) =>
+                  component.customId ===
+                  "ticket_claim"
+              )
+          )
+      );
+
+    if (!panelMessage) {
+      return;
+    }
+
+    const row =
+      new ActionRowBuilder();
+
+    for (
+      const component of
+        panelMessage.components[0].components
+    ) {
+      if (
+        component.customId ===
+        "ticket_claim"
+      ) {
+        const button =
+          new ButtonBuilder()
+            .setCustomId(
+              "ticket_claim"
+            )
+            .setLabel(
+              claimed
+                ? "Quitar reclamo"
+                : "Reclamar"
+            )
+            .setStyle(
+              claimed
+                ? ButtonStyle.Secondary
+                : ButtonStyle.Primary
+            )
+            .setEmoji(
+              config.emojis.claim
+            );
+
+        row.addComponents(
+          button
+        );
+
+        continue;
+      }
+
+      if (
+        component.customId ===
+        "ticket_close"
+      ) {
+        const button =
+          new ButtonBuilder()
+            .setCustomId(
+              "ticket_close"
+            )
+            .setLabel(
+              component.label ||
+              "Cerrar"
+            )
+            .setStyle(
+              component.style === 4
+                ? ButtonStyle.Danger
+                : ButtonStyle.Primary
+            )
+            .setEmoji(
+              component.emoji?.id
+                ? {
+                    id:
+                      component.emoji.id,
+                    name:
+                      component.emoji.name,
+                    animated:
+                      component.emoji.animated,
+                  }
+                : config.emojis.close
+            );
+
+        row.addComponents(
+          button
+        );
+      }
+    }
+
+    await panelMessage.edit({
+      components: [
+        row,
+      ],
+    });
+
+  } catch (error) {
+    console.error(
+      "⚠️ Error actualizando botón de reclamo:",
+      error
+    );
+  }
+}
+
+// ==================================================
+// RECLAMAR / QUITAR RECLAMO
 // ==================================================
 
 async function claimTicket(
@@ -686,11 +966,86 @@ async function claimTicket(
   const member =
     interaction.member;
 
-  if (
-    !member.roles.cache.has(
+  const isStaff =
+    member.roles.cache.has(
       config.roles.staff
-    )
+    );
+
+  // ==================================================
+  // QUITAR RECLAMO
+  // ==================================================
+
+  if (
+    ticket.claimedBy &&
+    ticket.claimedBy ===
+      interaction.user.id
   ) {
+    ticket.claimedBy =
+      null;
+
+    // Devolver acceso al Staff
+    await interaction.channel.permissionOverwrites.edit(
+      config.roles.staff,
+      {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+        AttachFiles: true,
+        EmbedLinks: true,
+      }
+    );
+
+    // Quitar permiso individual del staff anterior
+    try {
+      await interaction.channel.permissionOverwrites.delete(
+        interaction.user.id
+      );
+    } catch {}
+
+    await updateClaimButton(
+      interaction.channel,
+      false
+    );
+
+    await sendTicketLog(
+      interaction.guild,
+      "reopen",
+      ticket,
+      {
+        actorId:
+          interaction.user.id,
+      }
+    );
+
+    const embed =
+      new EmbedBuilder()
+        .setColor(0xfee75c)
+        .setTitle(
+          `ticket reabierto ${config.emojis.claim}`
+        )
+        .setDescription(
+          "Este ticket vuelve a estar disponible para todo el Staff."
+        );
+
+    await interaction.channel.send({
+      embeds: [
+        embed,
+      ],
+    });
+
+    return interaction.reply({
+      content:
+        "✅ Has quitado el reclamo. Todo el Staff vuelve a tener acceso.",
+      flags:
+        MessageFlags.Ephemeral,
+    });
+  }
+
+  // ==================================================
+  // VALIDAR STAFF
+  // ==================================================
+
+  if (!isStaff) {
     return interaction.reply({
       content:
         "❌ Solo el Staff puede reclamar tickets.",
@@ -699,8 +1054,14 @@ async function claimTicket(
     });
   }
 
+  // ==================================================
+  // TICKET YA RECLAMADO POR OTRO STAFF
+  // ==================================================
+
   if (
-    ticket.claimedBy
+    ticket.claimedBy &&
+    ticket.claimedBy !==
+      interaction.user.id
   ) {
     return interaction.reply({
       content:
@@ -709,6 +1070,10 @@ async function claimTicket(
         MessageFlags.Ephemeral,
     });
   }
+
+  // ==================================================
+  // RECLAMAR
+  // ==================================================
 
   ticket.claimedBy =
     interaction.user.id;
@@ -735,6 +1100,11 @@ async function claimTicket(
     }
   );
 
+  await updateClaimButton(
+    interaction.channel,
+    true
+  );
+
   // ==================================================
   // EMBED DE TICKET RECLAMADO
   // ==================================================
@@ -753,8 +1123,24 @@ async function claimTicket(
     content:
       `<@${ticket.userId}>`,
 
-    embeds: [embed],
+    embeds: [
+      embed,
+    ],
   });
+
+  // ==================================================
+  // LOG
+  // ==================================================
+
+  await sendTicketLog(
+    interaction.guild,
+    "claim",
+    ticket,
+    {
+      actorId:
+        interaction.user.id,
+    }
+  );
 
   await interaction.reply({
     content:
@@ -786,12 +1172,18 @@ async function closeTicket(
   }
 
   // Solo Staff
-  if (
-    !interaction.member.roles.cache.has(
+  const isStaff =
+    interaction.member.roles.cache.has(
       config.roles.staff
-    ) &&
-    interaction.user.id !==
-      ticket.claimedBy
+    );
+
+  const isClaimer =
+    interaction.user.id ===
+    ticket.claimedBy;
+
+  if (
+    !isStaff &&
+    !isClaimer
   ) {
     return interaction.reply({
       content:
@@ -801,13 +1193,24 @@ async function closeTicket(
     });
   }
 
+  const confirmEmbed =
+    new EmbedBuilder()
+      .setColor(0xed4245)
+      .setTitle(
+        "Cerrar ticket"
+      )
+      .setDescription(
+        "¿Estás seguro de que quieres cerrar este ticket?\n\n" +
+        "Si eliges **Sí, borrar**, se generará la transcripción y posteriormente se eliminará el ticket."
+      );
+
   const confirm =
     new ButtonBuilder()
       .setCustomId(
         "ticket_confirm_close"
       )
       .setLabel(
-        "Confirmar cierre"
+        "Sí, borrar"
       )
       .setStyle(
         ButtonStyle.Danger
@@ -819,7 +1222,7 @@ async function closeTicket(
         "ticket_cancel_close"
       )
       .setLabel(
-        "Cancelar"
+        "No borrar"
       )
       .setStyle(
         ButtonStyle.Secondary
@@ -833,11 +1236,12 @@ async function closeTicket(
       );
 
   await interaction.reply({
-    content:
-      "¿Estás seguro de que quieres cerrar este ticket?",
-    components: [row],
-    flags:
-      MessageFlags.Ephemeral,
+    embeds: [
+      confirmEmbed,
+    ],
+    components: [
+      row,
+    ],
   });
 }
 
@@ -848,11 +1252,23 @@ async function closeTicket(
 async function cancelClose(
   interaction
 ) {
-  await interaction.update({
-    content:
-      "❌ Cierre cancelado.",
-    components: [],
-  });
+  try {
+    await interaction.message.delete();
+  } catch (error) {
+    console.error(
+      "⚠️ No se pudo eliminar el mensaje de confirmación:",
+      error
+    );
+
+    try {
+      await interaction.update({
+        embeds: [],
+        content:
+          "❌ Cierre cancelado.",
+        components: [],
+      });
+    } catch {}
+  }
 }
 
 // ==================================================
@@ -872,19 +1288,75 @@ async function confirmClose(
 
   if (!ticket) {
     return interaction.update({
+      embeds: [],
       content:
         "❌ Este ticket ya no existe.",
       components: [],
     });
   }
 
+  // Evitar doble ejecución
+  if (
+    ticket.closing
+  ) {
+    return interaction.reply({
+      content:
+        "⏳ Este ticket ya se está cerrando.",
+      flags:
+        MessageFlags.Ephemeral,
+    });
+  }
+
+  ticket.closing =
+    true;
+
+  // ==================================================
+  // GUARDANDO TICKET
+  // ==================================================
+
+  const savingEmbed =
+    new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setDescription(
+        "Guardando ticket…"
+      );
+
   await interaction.update({
-    content:
-      "⏳ Guardando la transcripción y cerrando el ticket...",
+    embeds: [
+      savingEmbed,
+    ],
+    content: "",
     components: [],
   });
 
+  // Esperar 4 segundos
+  await new Promise(
+    (resolve) =>
+      setTimeout(
+        resolve,
+        4000
+      )
+  );
+
   try {
+    // ==================================================
+    // GENERANDO TRANSCRIPCIÓN
+    // ==================================================
+
+    const transcriptEmbed =
+      new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setDescription(
+          "Generando transcripción…"
+        );
+
+    await interaction.message.edit({
+      embeds: [
+        transcriptEmbed,
+      ],
+      components: [],
+    });
+
     // ==============================================
     // OBTENER MENSAJES
     // ==============================================
@@ -914,9 +1386,9 @@ async function confirmClose(
       interaction.guild
     );
 
-    // ==============================================
+    // ==================================================
     // URL
-    // ==============================================
+    // ==================================================
 
     let domain =
       process.env
@@ -990,42 +1462,85 @@ async function confirmClose(
           .setTimestamp();
 
       await transcriptChannel.send({
-        embeds: [embed],
+        embeds: [
+          embed,
+        ],
       });
     }
 
-    // ==============================================
-    // LOG
-    // ==============================================
+    // ==================================================
+    // LOG: TICKET CERRADO
+    // ==================================================
 
     await sendTicketLog(
-      interaction,
+      interaction.guild,
+      "close",
       ticket,
-      transcriptUrl
+      {
+        actorId:
+          interaction.user.id,
+
+        transcriptUrl,
+      }
     );
 
-    // ==============================================
+    // ==================================================
+    // BORRANDO EN 5 SEGUNDOS
+    // ==================================================
+
+    const deletingEmbed =
+      new EmbedBuilder()
+        .setColor(0xed4245)
+        .setDescription(
+          "Borrando en 5 segundos…"
+        );
+
+    await interaction.message.edit({
+      embeds: [
+        deletingEmbed,
+      ],
+      components: [],
+    });
+
+    // Esperar 5 segundos
+    await new Promise(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          5000
+        )
+    );
+
+    // ==================================================
+    // LOG: TICKET ELIMINADO
+    // ==================================================
+
+    await sendTicketLog(
+      interaction.guild,
+      "delete",
+      ticket,
+      {
+        actorId:
+          interaction.user.id,
+
+        transcriptUrl,
+      }
+    );
+
+    // ==================================================
     // ELIMINAR REGISTRO
-    // ==============================================
+    // ==================================================
 
     tickets.delete(
       channel.id
     );
 
-    // ==============================================
+    // ==================================================
     // BORRAR CANAL
-    // ==============================================
-
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          2000
-        )
-    );
+    // ==================================================
 
     await channel.delete(
-      "Ticket cerrado"
+      "Ticket eliminado después de generar la transcripción"
     );
 
   } catch (error) {
@@ -1034,98 +1549,24 @@ async function confirmClose(
       error
     );
 
+    ticket.closing =
+      false;
+
     try {
-      await interaction.followUp({
-        content:
-          "❌ Ocurrió un error al crear la transcripción. El ticket no fue eliminado.",
-        flags:
-          MessageFlags.Ephemeral,
+      const errorEmbed =
+        new EmbedBuilder()
+          .setColor(0xed4245)
+          .setDescription(
+            "❌ Ocurrió un error al crear la transcripción. El ticket no fue eliminado."
+          );
+
+      await interaction.message.edit({
+        embeds: [
+          errorEmbed,
+        ],
+        components: [],
       });
     } catch {}
-  }
-}
-
-// ==================================================
-// LOG
-// ==================================================
-
-async function sendTicketLog(
-  interaction,
-  ticket,
-  transcriptUrl
-) {
-  try {
-    const logChannel =
-      await interaction.guild.channels.fetch(
-        config.channels
-          .ticketLogs
-      );
-
-    if (!logChannel) {
-      return;
-    }
-
-    const embed =
-      new EmbedBuilder()
-        .setColor(0xed4245)
-        .setTitle(
-          "🎫 Ticket cerrado"
-        )
-        .addFields(
-          {
-            name:
-              "Ticket",
-            value:
-              `\`${ticket.id}\``,
-            inline: true,
-          },
-          {
-            name:
-              "Usuario",
-            value:
-              `<@${ticket.userId}>`,
-            inline: true,
-          },
-          {
-            name:
-              "Categoría",
-            value:
-              TICKET_TYPES[
-                ticket.type
-              ]?.label ||
-              ticket.type,
-            inline: true,
-          },
-          {
-            name:
-              "Staff",
-            value:
-              ticket.claimedBy
-                ? `<@${ticket.claimedBy}>`
-                : "No reclamado",
-            inline: true,
-          }
-        )
-        .setTimestamp();
-
-    if (transcriptUrl) {
-      embed.addFields({
-        name:
-          "Transcripción",
-        value:
-          `[Abrir transcript](${transcriptUrl})`,
-      });
-    }
-
-    await logChannel.send({
-      embeds: [embed],
-    });
-
-  } catch (error) {
-    console.error(
-      "❌ Error enviando log:",
-      error
-    );
   }
 }
 
