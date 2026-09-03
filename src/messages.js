@@ -53,30 +53,6 @@ db.prepare(`
 const builders = new Map();
 
 // ==================================================
-// ESPERAR EL PRIMER MENSAJE DEL USUARIO
-// ==================================================
-
-async function waitForUserMessage(
-  channel,
-  userId
-) {
-  try {
-    const collected =
-      await channel.awaitMessages({
-        filter: (message) =>
-          message.author.id === userId,
-        max: 1,
-        time: 5 * 60 * 1000,
-        errors: ["time"],
-      });
-
-    return collected.first();
-  } catch {
-    return null;
-  }
-}
-
-// ==================================================
 // MESSAGE BUILDER
 // ==================================================
 
@@ -106,9 +82,7 @@ function createMessageBuilder(content = "") {
 function createMessageBuilderButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(
-        "message_edit_content"
-      )
+      .setCustomId("message_edit_content")
       .setLabel("Editar contenido")
       .setStyle(ButtonStyle.Primary),
 
@@ -133,15 +107,18 @@ function createDefaultEmbedData() {
     title: "",
     description: "",
     color: "#5865F2",
+
     author: {
       name: "",
       iconURL: "",
       url: "",
     },
+
     footer: {
       text: "",
       iconURL: "",
     },
+
     image: "",
     thumbnail: "",
     timestamp: false,
@@ -156,45 +133,31 @@ function createDefaultEmbedData() {
 function buildDiscordEmbed(data) {
   const embed = new EmbedBuilder();
 
-  // --------------------------------------------------
   // COLOR
-  // --------------------------------------------------
-
   if (
     data.color &&
-    /^#[0-9A-Fa-f]{6}$/.test(
-      data.color
-    )
+    /^#[0-9A-Fa-f]{6}$/.test(data.color)
   ) {
     embed.setColor(data.color);
   } else {
     embed.setColor(0x5865f2);
   }
 
-  // --------------------------------------------------
   // TÍTULO
-  // --------------------------------------------------
-
   if (data.title?.trim()) {
     embed.setTitle(
       data.title.trim()
     );
   }
 
-  // --------------------------------------------------
   // DESCRIPCIÓN
-  // --------------------------------------------------
-
   if (data.description?.trim()) {
     embed.setDescription(
       data.description.trim()
     );
   }
 
-  // --------------------------------------------------
   // AUTOR
-  // --------------------------------------------------
-
   if (data.author?.name?.trim()) {
     const author = {
       name: data.author.name.trim(),
@@ -213,10 +176,7 @@ function buildDiscordEmbed(data) {
     embed.setAuthor(author);
   }
 
-  // --------------------------------------------------
   // FOOTER
-  // --------------------------------------------------
-
   if (data.footer?.text?.trim()) {
     const footer = {
       text: data.footer.text.trim(),
@@ -230,10 +190,7 @@ function buildDiscordEmbed(data) {
     embed.setFooter(footer);
   }
 
-  // --------------------------------------------------
   // IMAGEN
-  // --------------------------------------------------
-
   if (data.image?.trim()) {
     try {
       embed.setImage(
@@ -242,10 +199,7 @@ function buildDiscordEmbed(data) {
     } catch {}
   }
 
-  // --------------------------------------------------
   // THUMBNAIL
-  // --------------------------------------------------
-
   if (data.thumbnail?.trim()) {
     try {
       embed.setThumbnail(
@@ -254,18 +208,12 @@ function buildDiscordEmbed(data) {
     } catch {}
   }
 
-  // --------------------------------------------------
   // TIMESTAMP
-  // --------------------------------------------------
-
   if (data.timestamp) {
     embed.setTimestamp();
   }
 
-  // --------------------------------------------------
   // CAMPOS
-  // --------------------------------------------------
-
   if (
     Array.isArray(data.fields) &&
     data.fields.length > 0
@@ -278,8 +226,7 @@ function buildDiscordEmbed(data) {
         embed.addFields({
           name: field.name.trim(),
           value: field.value.trim(),
-          inline:
-            Boolean(field.inline),
+          inline: Boolean(field.inline),
         });
       }
     }
@@ -293,12 +240,33 @@ function buildDiscordEmbed(data) {
 // ==================================================
 
 function createEmbedBuilderEmbed(data) {
-  const embed =
-    buildDiscordEmbed(data);
+  const embed = buildDiscordEmbed(data);
 
-  embed.setTitle(
-    "EMBED BUILDER"
-  );
+  /*
+   * Si todavía no hay título ni descripción,
+   * mostramos EMBED BUILDER.
+   *
+   * IMPORTANTE:
+   * Ya NO sobrescribimos el título real
+   * del embed.
+   */
+
+  if (
+    !data.title?.trim() &&
+    !data.description?.trim() &&
+    (!data.fields ||
+      data.fields.length === 0) &&
+    !data.image &&
+    !data.thumbnail &&
+    !data.author?.name &&
+    !data.footer?.text
+  ) {
+    embed.setTitle("EMBED BUILDER");
+
+    embed.setDescription(
+      "Usa el botón **Editar** para comenzar a crear tu embed."
+    );
+  }
 
   return embed;
 }
@@ -327,7 +295,7 @@ function createEmbedBuilderButtons() {
 }
 
 // ==================================================
-// MENÚ DE EDICIÓN DEL EMBED
+// MENÚ PRINCIPAL DE EDICIÓN
 // ==================================================
 
 function createEmbedEditMenu() {
@@ -459,7 +427,7 @@ const embedCommand =
     );
 
 // ==================================================
-// /MESSAGE
+// COMANDOS /MESSAGE Y /EMBED
 // ==================================================
 
 async function handleMessageCommand(
@@ -470,6 +438,10 @@ async function handleMessageCommand(
   ) {
     return false;
   }
+
+  // ==================================================
+  // /MESSAGE
+  // ==================================================
 
   if (
     interaction.commandName ===
@@ -498,6 +470,10 @@ async function handleMessageCommand(
 
     return true;
   }
+
+  // ==================================================
+  // /EMBED
+  // ==================================================
 
   if (
     interaction.commandName ===
@@ -551,18 +527,19 @@ async function handleMessageInteraction(
   }
 
   const validIds = [
+    // MESSAGE
     "message_edit_content",
     "message_save",
     "message_cancel",
     "message_content_modal",
     "message_name_modal",
 
+    // EMBED
     "embed_edit",
     "embed_save",
     "embed_cancel",
     "embed_edit_property",
     "embed_fields_action",
-    "embed_field_edit_select",
 
     "embed_title_modal",
     "embed_description_modal",
@@ -573,8 +550,10 @@ async function handleMessageInteraction(
     "embed_thumbnail_modal",
 
     "embed_field_add_modal",
+    "embed_field_edit_select",
     "embed_field_edit_modal",
-    "embed_field_delete_modal",
+    "embed_field_delete_select",
+
     "embed_name_modal",
   ];
 
@@ -603,7 +582,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // MESSAGE: EDITAR CONTENIDO
+  // MESSAGE - EDITAR
   // ==================================================
 
   if (
@@ -651,34 +630,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // MESSAGE: MODAL CONTENIDO
-  // ==================================================
-
-  if (
-    interaction.customId ===
-    "message_content_modal"
-  ) {
-    builder.content =
-      interaction.fields.getTextInputValue(
-        "message_content"
-      );
-
-    await interaction.update({
-      embeds: [
-        createMessageBuilder(
-          builder.content
-        ),
-      ],
-      components: [
-        createMessageBuilderButtons(),
-      ],
-    });
-
-    return true;
-  }
-
-  // ==================================================
-  // MESSAGE: GUARDAR
+  // MESSAGE - GUARDAR
   // ==================================================
 
   if (
@@ -738,7 +690,34 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // MESSAGE: GUARDAR EN DB
+  // MESSAGE - MODAL CONTENIDO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "message_content_modal"
+  ) {
+    builder.content =
+      interaction.fields.getTextInputValue(
+        "message_content"
+      );
+
+    await interaction.update({
+      embeds: [
+        createMessageBuilder(
+          builder.content
+        ),
+      ],
+      components: [
+        createMessageBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // MESSAGE - MODAL NOMBRE
   // ==================================================
 
   if (
@@ -851,7 +830,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // MESSAGE: CANCELAR
+  // MESSAGE - CANCELAR
   // ==================================================
 
   if (
@@ -873,28 +852,39 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: EDITAR
+  // EMBED - EDITAR
   // ==================================================
 
   if (
     interaction.customId ===
     "embed_edit"
   ) {
-    await interaction.reply({
-      content:
-        "Selecciona qué parte del embed quieres editar.",
+    /*
+     * ANTES:
+     * Esto se mandaba como ephemeral.
+     *
+     * AHORA:
+     * Editamos directamente el mensaje
+     * original del builder.
+     */
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
       components: [
         createEmbedEditMenu(),
       ],
-      flags:
-        MessageFlags.Ephemeral,
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: SELECCIONAR PROPIEDAD
+  // EMBED - SELECCIONAR PROPIEDAD
   // ==================================================
 
   if (
@@ -904,9 +894,9 @@ async function handleMessageInteraction(
     const property =
       interaction.values[0];
 
-    // ----------------------------------------------
+    // ==================================================
     // TIMESTAMP
-    // ----------------------------------------------
+    // ==================================================
 
     if (
       property === "timestamp"
@@ -923,14 +913,15 @@ async function handleMessageInteraction(
         components: [
           createEmbedBuilderButtons(),
         ],
+        content: null,
       });
 
       return true;
     }
 
-    // ----------------------------------------------
+    // ==================================================
     // CAMPOS
-    // ----------------------------------------------
+    // ==================================================
 
     if (
       property === "fields"
@@ -938,6 +929,7 @@ async function handleMessageInteraction(
       await interaction.update({
         content:
           "Selecciona qué quieres hacer con los campos.",
+        embeds: [],
         components: [
           createFieldsMenu(),
         ],
@@ -946,23 +938,28 @@ async function handleMessageInteraction(
       return true;
     }
 
-    // ----------------------------------------------
+    // ==================================================
     // MODALES
-    // ----------------------------------------------
+    // ==================================================
 
     const modalMap = {
       title: {
-        id: "embed_title_modal",
-        title: "Editar título",
-        label: "Título",
-        customId: "embed_title",
-        value:
-          builder.data.title,
+        id:
+          "embed_title_modal",
+        title:
+          "Editar título",
+        label:
+          "Título",
+        customId:
+          "embed_title",
         style:
           TextInputStyle.Short,
-        max: 256,
+        max:
+          256,
         placeholder:
           "Título del embed",
+        value:
+          builder.data.title,
       },
 
       description: {
@@ -974,41 +971,52 @@ async function handleMessageInteraction(
           "Descripción",
         customId:
           "embed_description",
-        value:
-          builder.data.description,
         style:
           TextInputStyle.Paragraph,
-        max: 4096,
+        max:
+          4096,
         placeholder:
           "Descripción del embed",
+        value:
+          builder.data.description,
       },
 
       color: {
-        id: "embed_color_modal",
-        title: "Editar color",
-        label: "Color HEX",
-        customId: "embed_color",
-        value:
-          builder.data.color,
+        id:
+          "embed_color_modal",
+        title:
+          "Editar color",
+        label:
+          "Color HEX",
+        customId:
+          "embed_color",
         style:
           TextInputStyle.Short,
-        max: 7,
+        max:
+          7,
         placeholder:
           "#5865F2",
+        value:
+          builder.data.color,
       },
 
       image: {
-        id: "embed_image_modal",
-        title: "Editar imagen",
-        label: "URL de la imagen",
-        customId: "embed_image",
-        value:
-          builder.data.image,
+        id:
+          "embed_image_modal",
+        title:
+          "Editar imagen",
+        label:
+          "URL de la imagen",
+        customId:
+          "embed_image",
         style:
           TextInputStyle.Short,
-        max: 2048,
+        max:
+          2048,
         placeholder:
           "https://ejemplo.com/imagen.png",
+        value:
+          builder.data.image,
       },
 
       thumbnail: {
@@ -1020,57 +1028,68 @@ async function handleMessageInteraction(
           "URL del thumbnail",
         customId:
           "embed_thumbnail",
-        value:
-          builder.data.thumbnail,
         style:
           TextInputStyle.Short,
-        max: 2048,
+        max:
+          2048,
         placeholder:
           "https://ejemplo.com/imagen.png",
+        value:
+          builder.data.thumbnail,
       },
     };
 
-    const config =
+    const modal =
       modalMap[property];
 
-    if (config) {
-      const modal =
+    if (modal) {
+      const modalBuilder =
         new ModalBuilder()
-          .setCustomId(config.id)
-          .setTitle(config.title);
+          .setCustomId(
+            modal.id
+          )
+          .setTitle(
+            modal.title
+          );
 
       const input =
         new TextInputBuilder()
           .setCustomId(
-            config.customId
+            modal.customId
           )
-          .setLabel(config.label)
-          .setStyle(config.style)
+          .setLabel(
+            modal.label
+          )
+          .setStyle(
+            modal.style
+          )
           .setRequired(false)
-          .setMaxLength(config.max)
+          .setMaxLength(
+            modal.max
+          )
           .setPlaceholder(
-            config.placeholder
+            modal.placeholder
           )
           .setValue(
-            config.value || ""
+            modal.value || ""
           );
 
-      modal.addComponents(
+      modalBuilder.addComponents(
         new ActionRowBuilder().addComponents(
           input
         )
       );
 
       await interaction.showModal(
-        modal
+        modalBuilder
       );
 
       return true;
     }
 
-    // ----------------------------------------------
+    // ==================================================
     // AUTOR
-    // ----------------------------------------------
+    // ==================================================
 
     if (
       property === "author"
@@ -1157,9 +1176,9 @@ async function handleMessageInteraction(
       return true;
     }
 
-    // ----------------------------------------------
+    // ==================================================
     // FOOTER
-    // ----------------------------------------------
+    // ==================================================
 
     if (
       property === "footer"
@@ -1227,7 +1246,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: CAMPOS
+  // EMBED - CAMPOS
   // ==================================================
 
   if (
@@ -1237,11 +1256,13 @@ async function handleMessageInteraction(
     const action =
       interaction.values[0];
 
-    // ----------------------------------------------
+    // ==================================================
     // AGREGAR
-    // ----------------------------------------------
+    // ==================================================
 
-    if (action === "add") {
+    if (
+      action === "add"
+    ) {
       const modal =
         new ModalBuilder()
           .setCustomId(
@@ -1281,7 +1302,7 @@ async function handleMessageInteraction(
             "field_inline"
           )
           .setLabel(
-            "Inline: escribe sí o no"
+            "Inline: sí o no"
           )
           .setStyle(
             TextInputStyle.Short
@@ -1311,20 +1332,21 @@ async function handleMessageInteraction(
       return true;
     }
 
-    // ----------------------------------------------
+    // ==================================================
     // EDITAR
-    // ----------------------------------------------
+    // ==================================================
 
     if (
       action === "edit"
     ) {
       if (
-        builder.data.fields
-          .length === 0
+        builder.data.fields.length ===
+        0
       ) {
         await interaction.update({
           content:
             "❌ No hay campos para editar.",
+          embeds: [],
           components: [],
         });
 
@@ -1341,7 +1363,10 @@ async function handleMessageInteraction(
           )
           .addOptions(
             builder.data.fields.map(
-              (field, index) => ({
+              (
+                field,
+                index
+              ) => ({
                 label:
                   `${index + 1}. ${field.name}`.slice(
                     0,
@@ -1361,6 +1386,7 @@ async function handleMessageInteraction(
       await interaction.update({
         content:
           "Selecciona el campo que quieres editar.",
+        embeds: [],
         components: [
           new ActionRowBuilder().addComponents(
             menu
@@ -1371,20 +1397,21 @@ async function handleMessageInteraction(
       return true;
     }
 
-    // ----------------------------------------------
+    // ==================================================
     // ELIMINAR
-    // ----------------------------------------------
+    // ==================================================
 
     if (
       action === "delete"
     ) {
       if (
-        builder.data.fields
-          .length === 0
+        builder.data.fields.length ===
+        0
       ) {
         await interaction.update({
           content:
             "❌ No hay campos para eliminar.",
+          embeds: [],
           components: [],
         });
 
@@ -1401,7 +1428,10 @@ async function handleMessageInteraction(
           )
           .addOptions(
             builder.data.fields.map(
-              (field, index) => ({
+              (
+                field,
+                index
+              ) => ({
                 label:
                   `${index + 1}. ${field.name}`.slice(
                     0,
@@ -1416,6 +1446,7 @@ async function handleMessageInteraction(
       await interaction.update({
         content:
           "Selecciona el campo que quieres eliminar.",
+        embeds: [],
         components: [
           new ActionRowBuilder().addComponents(
             menu
@@ -1428,7 +1459,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: EDITAR CAMPO
+  // EDITAR CAMPO
   // ==================================================
 
   if (
@@ -1436,7 +1467,9 @@ async function handleMessageInteraction(
     "embed_field_edit_select"
   ) {
     const index =
-      Number(interaction.values[0]);
+      Number(
+        interaction.values[0]
+      );
 
     const field =
       builder.data.fields[index];
@@ -1533,7 +1566,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: ELIMINAR CAMPO
+  // ELIMINAR CAMPO
   // ==================================================
 
   if (
@@ -1541,7 +1574,9 @@ async function handleMessageInteraction(
     "embed_field_delete_select"
   ) {
     const index =
-      Number(interaction.values[0]);
+      Number(
+        interaction.values[0]
+      );
 
     if (
       !builder.data.fields[index]
@@ -1577,7 +1612,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: MODAL TÍTULO
+  // TÍTULO
   // ==================================================
 
   if (
@@ -1585,9 +1620,11 @@ async function handleMessageInteraction(
     "embed_title_modal"
   ) {
     builder.data.title =
-      interaction.fields.getTextInputValue(
-        "embed_title"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "embed_title"
+        )
+        .trim();
 
     await interaction.update({
       embeds: [
@@ -1598,13 +1635,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: MODAL DESCRIPCIÓN
+  // DESCRIPCIÓN
   // ==================================================
 
   if (
@@ -1612,9 +1650,11 @@ async function handleMessageInteraction(
     "embed_description_modal"
   ) {
     builder.data.description =
-      interaction.fields.getTextInputValue(
-        "embed_description"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "embed_description"
+        )
+        .trim();
 
     await interaction.update({
       embeds: [
@@ -1625,13 +1665,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: MODAL COLOR
+  // COLOR
   // ==================================================
 
   if (
@@ -1672,13 +1713,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: MODAL AUTOR
+  // AUTOR
   // ==================================================
 
   if (
@@ -1686,19 +1728,25 @@ async function handleMessageInteraction(
     "embed_author_modal"
   ) {
     builder.data.author.name =
-      interaction.fields.getTextInputValue(
-        "author_name"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "author_name"
+        )
+        .trim();
 
     builder.data.author.iconURL =
-      interaction.fields.getTextInputValue(
-        "author_icon"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "author_icon"
+        )
+        .trim();
 
     builder.data.author.url =
-      interaction.fields.getTextInputValue(
-        "author_url"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "author_url"
+        )
+        .trim();
 
     await interaction.update({
       embeds: [
@@ -1709,13 +1757,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: MODAL FOOTER
+  // FOOTER
   // ==================================================
 
   if (
@@ -1723,14 +1772,18 @@ async function handleMessageInteraction(
     "embed_footer_modal"
   ) {
     builder.data.footer.text =
-      interaction.fields.getTextInputValue(
-        "footer_text"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "footer_text"
+        )
+        .trim();
 
     builder.data.footer.iconURL =
-      interaction.fields.getTextInputValue(
-        "footer_icon"
-      );
+      interaction.fields
+        .getTextInputValue(
+          "footer_icon"
+        )
+        .trim();
 
     await interaction.update({
       embeds: [
@@ -1741,13 +1794,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: MODAL IMAGEN
+  // IMAGEN
   // ==================================================
 
   if (
@@ -1755,9 +1809,11 @@ async function handleMessageInteraction(
     "embed_image_modal"
   ) {
     builder.data.image =
-      interaction.fields.getTextInputValue(
-        "embed_image"
-      ).trim();
+      interaction.fields
+        .getTextInputValue(
+          "embed_image"
+        )
+        .trim();
 
     await interaction.update({
       embeds: [
@@ -1768,13 +1824,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: MODAL THUMBNAIL
+  // THUMBNAIL
   // ==================================================
 
   if (
@@ -1782,9 +1839,11 @@ async function handleMessageInteraction(
     "embed_thumbnail_modal"
   ) {
     builder.data.thumbnail =
-      interaction.fields.getTextInputValue(
-        "embed_thumbnail"
-      ).trim();
+      interaction.fields
+        .getTextInputValue(
+          "embed_thumbnail"
+        )
+        .trim();
 
     await interaction.update({
       embeds: [
@@ -1795,13 +1854,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: AGREGAR CAMPO
+  // AGREGAR CAMPO
   // ==================================================
 
   if (
@@ -1848,13 +1908,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: EDITAR CAMPO
+  // EDITAR CAMPO
   // ==================================================
 
   if (
@@ -1879,9 +1940,7 @@ async function handleMessageInteraction(
       return true;
     }
 
-    builder.data.fields[
-      index
-    ] = {
+    builder.data.fields[index] = {
       name:
         interaction.fields
           .getTextInputValue(
@@ -1918,13 +1977,14 @@ async function handleMessageInteraction(
       components: [
         createEmbedBuilderButtons(),
       ],
+      content: null,
     });
 
     return true;
   }
 
   // ==================================================
-  // EMBED: GUARDAR
+  // EMBED - GUARDAR
   // ==================================================
 
   if (
@@ -1971,7 +2031,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: GUARDAR EN DB
+  // EMBED - GUARDAR NOMBRE
   // ==================================================
 
   if (
@@ -2061,6 +2121,7 @@ async function handleMessageInteraction(
             ),
         ],
         components: [],
+        content: null,
       });
 
       console.log(
@@ -2086,7 +2147,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED: CANCELAR
+  // EMBED - CANCELAR
   // ==================================================
 
   if (
