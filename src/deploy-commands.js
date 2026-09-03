@@ -7,6 +7,8 @@ const {
   messageCommand,
   embedCommand,
   sendCommand,
+  editMessageCommand,
+  editEmbedCommand,
 } = require("./messages");
 
 // ==================================================
@@ -17,6 +19,8 @@ const commands = [
   messageCommand.toJSON(),
   embedCommand.toJSON(),
   sendCommand.toJSON(),
+  editMessageCommand.toJSON(),
+  editEmbedCommand.toJSON(),
 ];
 
 // ==================================================
@@ -68,6 +72,14 @@ async function deployCommands() {
     console.log(
       "   /send"
     );
+
+    console.log(
+      "   /edit-message"
+    );
+    console.log(
+      "   /edit-embed"
+    );
+    
   } catch (error) {
     console.error(
       "❌ Error registrando comandos:",

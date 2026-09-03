@@ -976,6 +976,62 @@ async function handleMessageInteraction(
     }
 
     try {
+      // ==================================================
+      // ACTUALIZAR MENSAJE EXISTENTE
+      // ==================================================
+
+      if (
+        builder.editing &&
+        builder.savedId
+      ) {
+        const now =
+          Date.now();
+
+        db.prepare(`
+          UPDATE saved_messages
+          SET content = ?,
+              updated_at = ?
+          WHERE id = ?
+          AND guild_id = ?
+        `).run(
+          builder.content,
+          now,
+          builder.savedId,
+          builder.guildId
+        );
+
+        const message =
+          await getBuilderMessage(
+            interaction.client,
+            builder
+          );
+
+        if (message) {
+          await message.edit({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(
+                  0x57f287
+                )
+                .setTitle(
+                  "MESSAGE BUILDER"
+                )
+                .setDescription(
+                  "**Mensaje actualizado correctamente.**\n\n" +
+                    `**Nombre:** \`${builder.savedName}\`\n\n` +
+                    "Los cambios se guardaron correctamente."
+                ),
+            ],
+            components: [],
+          });
+        }
+
+        builders.delete(
+          interaction.user.id
+        );
+
+        return true;
+      }
       const existing =
         db.prepare(`
           SELECT id
@@ -2357,6 +2413,64 @@ async function handleMessageInteraction(
     }
 
     try {
+      // ==================================================
+      // ACTUALIZAR EMBED EXISTENTE
+      // ==================================================
+
+      if (
+        builder.editing &&
+        builder.savedId
+      ) {
+        const now =
+          Date.now();
+
+        db.prepare(`
+          UPDATE saved_embeds
+          SET data = ?,
+              updated_at = ?
+          WHERE id = ?
+          AND guild_id = ?
+        `).run(
+          JSON.stringify(
+            builder.data
+          ),
+          now,
+          builder.savedId,
+          builder.guildId
+        );
+
+        const message =
+          await getBuilderMessage(
+            interaction.client,
+            builder
+          );
+
+        if (message) {
+          await message.edit({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(
+                  0x57f287
+                )
+                .setTitle(
+                  "EMBED BUILDER"
+                )
+                .setDescription(
+                  "**Embed actualizado correctamente.**\n\n" +
+                    `**Nombre:** \`${builder.savedName}\`\n\n` +
+                    "Los cambios se guardaron correctamente."
+                ),
+            ],
+            components: [],
+          });
+        }
+
+        builders.delete(
+          interaction.user.id
+        );
+
+        return true;
+      }
       const existing =
         db.prepare(`
           SELECT id
@@ -2550,6 +2664,54 @@ const sendCommand =
     );
 
 // ==================================================
+// /EDIT-MESSAGE
+// ==================================================
+
+const editMessageCommand =
+  new SlashCommandBuilder()
+    .setName("edit-message")
+    .setDescription(
+      "Edita un mensaje guardado."
+    )
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageMessages.toString()
+    )
+    .addStringOption(
+      (option) =>
+        option
+          .setName("mensaje")
+          .setDescription(
+            "Selecciona el mensaje que quieres editar."
+          )
+          .setRequired(true)
+          .setAutocomplete(true)
+    );
+
+// ==================================================
+// /EDIT-EMBED
+// ==================================================
+
+const editEmbedCommand =
+  new SlashCommandBuilder()
+    .setName("edit-embed")
+    .setDescription(
+      "Edita un embed guardado."
+    )
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageMessages.toString()
+    )
+    .addStringOption(
+      (option) =>
+        option
+          .setName("embed")
+          .setDescription(
+            "Selecciona el embed que quieres editar."
+          )
+          .setRequired(true)
+          .setAutocomplete(true)
+    );
+
+// ==================================================
 // AUTOCOMPLETADO DE /SEND
 // ==================================================
 
@@ -2572,6 +2734,357 @@ async function handleSendAutocomplete(
   const focused =
     interaction.options.getFocused(true);
 
+  // ==================================================
+  // MANEJAR /EDIT-MESSAGE Y /EDIT-EMBED
+  // ==================================================
+
+  async function handleEditInteraction(
+    interaction
+  ) {
+    if (
+      !interaction.isChatInputCommand()
+    ) {
+      return false;
+    }
+
+    // ==================================================
+    // /EDIT-MESSAGE
+    // ==================================================
+
+    if (
+      interaction.commandName ===
+      "edit-message"
+    ) {
+      const id =
+        interaction.options.getString(
+          "mensaje"
+        );
+
+      const saved =
+        db.prepare(`
+          SELECT *
+          FROM saved_messages
+          WHERE id = ?
+          AND guild_id = ?
+        `).get(
+          id,
+          interaction.guildId
+        );
+
+      if (!saved) {
+        await interaction.reply({
+          content:
+            "❌ No se encontró el mensaje guardado.",
+          flags:
+            MessageFlags.Ephemeral,
+        });
+
+        return true;
+      }
+
+      const builder = {
+        type: "message",
+        guildId:
+          interaction.guildId,
+        channelId:
+          interaction.channelId,
+        messageId:
+          null,
+        content:
+          saved.content || "",
+
+        editing: true,
+        savedId:
+          saved.id,
+        savedName:
+          saved.name,
+      };
+
+      const embed =
+        createMessageBuilder(
+          builder.content
+        );
+
+      const message =
+        await interaction.reply({
+          embeds: [
+            embed,
+          ],
+          components: [
+            createMessageBuilderButtons(),
+          ],
+          fetchReply: true,
+        });
+
+      builder.messageId =
+        message.id;
+
+      builders.set(
+        interaction.user.id,
+        builder
+      );
+
+      return true;
+    }
+
+    // ==================================================
+    // /EDIT-EMBED
+    // ==================================================
+
+    if (
+      interaction.commandName ===
+      "edit-embed"
+    ) {
+      const id =
+        interaction.options.getString(
+          "embed"
+        );
+
+      const saved =
+        db.prepare(`
+          SELECT *
+          FROM saved_embeds
+          WHERE id = ?
+          AND guild_id = ?
+        `).get(
+          id,
+          interaction.guildId
+        );
+
+      if (!saved) {
+        await interaction.reply({
+          content:
+            "❌ No se encontró el embed guardado.",
+          flags:
+            MessageFlags.Ephemeral,
+        });
+
+        return true;
+      }
+
+      let data;
+
+      try {
+        data =
+          JSON.parse(
+            saved.data
+          );
+      } catch (error) {
+        console.error(
+          "❌ Error leyendo el embed guardado:",
+          error
+        );
+
+        await interaction.reply({
+          content:
+            "❌ Los datos de este embed están dañados.",
+          flags:
+            MessageFlags.Ephemeral,
+        });
+
+        return true;
+      }
+
+      const builder = {
+        type: "embed",
+        guildId:
+          interaction.guildId,
+        channelId:
+          interaction.channelId,
+        messageId:
+          null,
+
+        data: {
+          title:
+            data.title || "",
+
+          description:
+            data.description || "",
+
+          color:
+            data.color || "#5865F2",
+
+          author: {
+            name:
+              data.author?.name || "",
+
+            iconURL:
+              data.author?.iconURL || "",
+
+            url:
+              data.author?.url || "",
+          },
+
+          footer: {
+            text:
+              data.footer?.text || "",
+
+            iconURL:
+              data.footer?.iconURL || "",
+          },
+
+          image:
+            data.image || "",
+
+          thumbnail:
+            data.thumbnail || "",
+
+          timestamp:
+            Boolean(
+              data.timestamp
+            ),
+
+          fields:
+            Array.isArray(
+              data.fields
+            )
+              ? data.fields
+              : [],
+        },
+
+        editing: true,
+        savedId:
+          saved.id,
+        savedName:
+          saved.name,
+      };
+
+      const message =
+        await interaction.reply({
+          embeds: [
+            createEmbedBuilderEmbed(
+              builder.data
+            ),
+          ],
+          components: [
+            createEmbedBuilderButtons(),
+          ],
+          fetchReply: true,
+        });
+
+      builder.messageId =
+        message.id;
+
+      builders.set(
+        interaction.user.id,
+        builder
+      );
+
+      return true;
+    }
+
+    return false;
+  }
+  
+  // ==================================================
+  // AUTOCOMPLETADO DE EDICIÓN
+  // ==================================================
+
+  async function handleEditAutocomplete(
+    interaction
+  ) {
+    if (
+      !interaction.isAutocomplete()
+    ) {
+      return false;
+    }
+
+    if (
+      interaction.commandName !==
+        "edit-message" &&
+      interaction.commandName !==
+        "edit-embed"
+    ) {
+      return false;
+    }
+
+    const focused =
+      interaction.options.getFocused();
+
+    const search =
+      focused.toLowerCase();
+
+    // ==================================================
+    // EDIT-MESSAGE
+    // ==================================================
+
+    if (
+      interaction.commandName ===
+      "edit-message"
+    ) {
+      const results =
+        db.prepare(`
+          SELECT id, name
+          FROM saved_messages
+          WHERE guild_id = ?
+          AND LOWER(name) LIKE ?
+          ORDER BY name ASC
+          LIMIT 25
+        `).all(
+          interaction.guildId,
+          `%${search}%`
+        );
+
+      await interaction.respond(
+        results.map(
+          (item) => ({
+            name:
+              item.name.slice(
+                0,
+                100
+              ),
+
+            value:
+              String(item.id),
+          })
+        )
+      );
+
+      return true;
+    }
+
+    // ==================================================
+    // EDIT-EMBED
+    // ==================================================
+
+    if (
+      interaction.commandName ===
+      "edit-embed"
+    ) {
+      const results =
+        db.prepare(`
+          SELECT id, name
+          FROM saved_embeds
+          WHERE guild_id = ?
+          AND LOWER(name) LIKE ?
+          ORDER BY name ASC
+          LIMIT 25
+        `).all(
+          interaction.guildId,
+          `%${search}%`
+        );
+
+      await interaction.respond(
+        results.map(
+          (item) => ({
+            name:
+              item.name.slice(
+                0,
+                100
+              ),
+
+            value:
+              String(item.id),
+          })
+        )
+      );
+
+      return true;
+    }
+
+    return false;
+  }
+  
   // ==================================================
   // CONTENIDO
   // ==================================================
@@ -2998,8 +3511,16 @@ async function handleSendInteraction(
     messageCommand,
     embedCommand,
     sendCommand,
+
+    editMessageCommand,
+    editEmbedCommand,
+
     handleMessageCommand,
     handleMessageInteraction,
+
     handleSendInteraction,
     handleSendAutocomplete,
+
+    handleEditInteraction,
+    handleEditAutocomplete,
   };

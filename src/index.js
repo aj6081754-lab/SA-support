@@ -25,6 +25,8 @@ const {
   handleMessageInteraction,
   handleSendInteraction,
   handleSendAutocomplete,
+  handleEditInteraction,
+  handleEditAutocomplete,
 } = require("./messages");
 
 // ==================================================
@@ -156,7 +158,37 @@ client.once(
 client.on(
   Events.InteractionCreate,
   async (interaction) => {
+    
     try {
+      
+      // ==================================================
+      // AUTOCOMPLETADO DE /EDIT
+      // ==================================================
+
+      if (
+        interaction.isAutocomplete()
+      ) {
+        const handled =
+          await handleEditAutocomplete(
+            interaction
+          );
+
+        if (handled) {
+          return;
+        }
+      }
+
+      // ==================================================
+      // /EDIT-MESSAGE / /EDIT-EMBED
+      // ==================================================
+      const editHandled =
+        await handleEditInteraction(
+          interaction
+        );
+      if (editHandled) {
+        return;
+      }
+      
       // ==================================================
       // MESSAGE BUILDER
       // ==================================================
