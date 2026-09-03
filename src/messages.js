@@ -2867,13 +2867,132 @@ async function handleSendInteraction(
     return true;
   }
 
+    // ==================================================
+    // CREAR MENCIÓN
+    // ==================================================
+
+    let mentionText = "";
+
+    if (
+      mention ===
+      "everyone"
+    ) {
+      mentionText =
+        "@everyone";
+    }
+
+    else if (
+      mention ===
+      "here"
+    ) {
+      mentionText =
+        "@here";
+    }
+
+    else if (
+      mention
+    ) {
+      const role =
+        interaction.guild.roles.cache.get(
+          mention
+        );
+
+      if (role) {
+        mentionText =
+          `<@&${role.id}>`;
+      }
+    }
+
+    // ==================================================
+    // ENVIAR
+    // ==================================================
+
+    try {
+      // MENSAJE
+      if (
+        tipo === "message"
+      ) {
+        await canal.send({
+          content:
+            mentionText
+              ? `${mentionText}\n${saved.content}`
+              : saved.content,
+
+          allowedMentions: {
+            parse: [
+              "roles",
+              "users",
+              "everyone",
+            ],
+          },
+        });
+      }
+
+      // EMBED
+      if (
+        tipo === "embed"
+      ) {
+        const data =
+          JSON.parse(
+            saved.data
+          );
+
+        await canal.send({
+          content:
+            mentionText ||
+            undefined,
+
+          embeds: [
+            buildDiscordEmbed(
+              data
+            ),
+          ],
+
+          allowedMentions: {
+            parse: [
+              "roles",
+              "users",
+              "everyone",
+            ],
+          },
+        });
+      }
+
+      await interaction.reply({
+        content:
+          `✅ ${
+            tipo === "message"
+              ? "Mensaje"
+              : "Embed"
+          } enviado correctamente en ${canal}.`,
+
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error(
+        "❌ Error enviando contenido:",
+        error
+      );
+
+      await interaction.reply({
+        content:
+          "❌ No pude enviar el contenido en ese canal. Comprueba los permisos del bot.",
+
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+  }
+
   // ==================================================
-  // CREAR MENCIÓN
+  // EXPORTS
   // ==================================================
-  
-// ==================================================
-// EXPORTS
-// ==================================================
 
   module.exports = {
     messageCommand,
