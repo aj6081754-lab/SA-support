@@ -53,20 +53,145 @@ db.prepare(`
 const builders = new Map();
 
 // ==================================================
+// OBTENER MENSAJE DEL BUILDER
+// ==================================================
+
+async function getBuilderMessage(
+  client,
+  builder
+) {
+  try {
+    if (
+      !builder.guildId ||
+      !builder.channelId ||
+      !builder.messageId
+    ) {
+      return null;
+    }
+
+    const guild =
+      client.guilds.cache.get(
+        builder.guildId
+      );
+
+    if (!guild) {
+      return null;
+    }
+
+    const channel =
+      guild.channels.cache.get(
+        builder.channelId
+      );
+
+    if (
+      !channel ||
+      !channel.isTextBased()
+    ) {
+      return null;
+    }
+
+    const message =
+      await channel.messages.fetch(
+        builder.messageId
+      );
+
+    return message;
+  } catch (error) {
+    console.error(
+      "❌ No se pudo obtener el mensaje del builder:",
+      error
+    );
+
+    return null;
+  }
+}
+
+// ==================================================
+// ACTUALIZAR BUILDER
+// ==================================================
+
+async function updateBuilderMessage(
+  interaction,
+  builder
+) {
+  try {
+    const message =
+      await getBuilderMessage(
+        interaction.client,
+        builder
+      );
+
+    if (!message) {
+      return false;
+    }
+
+    if (
+      builder.type === "message"
+    ) {
+      await message.edit({
+        embeds: [
+          createMessageBuilder(
+            builder.content
+          ),
+        ],
+        components: [
+          createMessageBuilderButtons(),
+        ],
+      });
+
+      return true;
+    }
+
+    if (
+      builder.type === "embed"
+    ) {
+      await message.edit({
+        embeds: [
+          createEmbedBuilderEmbed(
+            builder.data
+          ),
+        ],
+        components: [
+          createEmbedBuilderButtons(),
+        ],
+        content: null,
+      });
+
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error(
+      "❌ Error actualizando el builder:",
+      error
+    );
+
+    return false;
+  }
+}
+
+// ==================================================
 // MESSAGE BUILDER
 // ==================================================
 
-function createMessageBuilder(content = "") {
+function createMessageBuilder(
+  content = ""
+) {
   const preview =
-    content.trim() || "Sin contenido";
+    content.trim() ||
+    "Sin contenido";
 
   return new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle("MESSAGE BUILDER")
+    .setTitle(
+      "MESSAGE BUILDER"
+    )
     .setDescription(
       "**Contenido**\n" +
         `> ${
-          content.trim() || "Sin contenido"
+          content.trim() ||
+          "Sin contenido"
         }\n\n` +
         "**Vista previa**\n" +
         "```text\n" +
@@ -82,24 +207,42 @@ function createMessageBuilder(content = "") {
 function createMessageBuilderButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("message_edit_content")
-      .setLabel("Editar contenido")
-      .setStyle(ButtonStyle.Primary),
+      .setCustomId(
+        "message_edit_content"
+      )
+      .setLabel(
+        "Editar contenido"
+      )
+      .setStyle(
+        ButtonStyle.Primary
+      ),
 
     new ButtonBuilder()
-      .setCustomId("message_save")
-      .setLabel("Guardar")
-      .setStyle(ButtonStyle.Success),
+      .setCustomId(
+        "message_save"
+      )
+      .setLabel(
+        "Guardar"
+      )
+      .setStyle(
+        ButtonStyle.Success
+      ),
 
     new ButtonBuilder()
-      .setCustomId("message_cancel")
-      .setLabel("Cancelar")
-      .setStyle(ButtonStyle.Danger)
+      .setCustomId(
+        "message_cancel"
+      )
+      .setLabel(
+        "Cancelar"
+      )
+      .setStyle(
+        ButtonStyle.Danger
+      )
   );
 }
 
 // ==================================================
-// EMBED BUILDER
+// DATOS DEFAULT DEL EMBED
 // ==================================================
 
 function createDefaultEmbedData() {
@@ -130,68 +273,99 @@ function createDefaultEmbedData() {
 // CREAR EMBED REAL
 // ==================================================
 
-function buildDiscordEmbed(data) {
-  const embed = new EmbedBuilder();
+function buildDiscordEmbed(
+  data
+) {
+  const embed =
+    new EmbedBuilder();
 
   // COLOR
   if (
     data.color &&
-    /^#[0-9A-Fa-f]{6}$/.test(data.color)
+    /^#[0-9A-Fa-f]{6}$/.test(
+      data.color
+    )
   ) {
-    embed.setColor(data.color);
+    embed.setColor(
+      data.color
+    );
   } else {
-    embed.setColor(0x5865f2);
+    embed.setColor(
+      0x5865f2
+    );
   }
 
   // TÍTULO
-  if (data.title?.trim()) {
+  if (
+    data.title?.trim()
+  ) {
     embed.setTitle(
       data.title.trim()
     );
   }
 
   // DESCRIPCIÓN
-  if (data.description?.trim()) {
+  if (
+    data.description?.trim()
+  ) {
     embed.setDescription(
       data.description.trim()
     );
   }
 
   // AUTOR
-  if (data.author?.name?.trim()) {
+  if (
+    data.author?.name?.trim()
+  ) {
     const author = {
-      name: data.author.name.trim(),
+      name:
+        data.author.name.trim(),
     };
 
-    if (data.author.url?.trim()) {
+    if (
+      data.author.url?.trim()
+    ) {
       author.url =
         data.author.url.trim();
     }
 
-    if (data.author.iconURL?.trim()) {
+    if (
+      data.author.iconURL?.trim()
+    ) {
       author.iconURL =
         data.author.iconURL.trim();
     }
 
-    embed.setAuthor(author);
+    embed.setAuthor(
+      author
+    );
   }
 
   // FOOTER
-  if (data.footer?.text?.trim()) {
+  if (
+    data.footer?.text?.trim()
+  ) {
     const footer = {
-      text: data.footer.text.trim(),
+      text:
+        data.footer.text.trim(),
     };
 
-    if (data.footer.iconURL?.trim()) {
+    if (
+      data.footer.iconURL?.trim()
+    ) {
       footer.iconURL =
         data.footer.iconURL.trim();
     }
 
-    embed.setFooter(footer);
+    embed.setFooter(
+      footer
+    );
   }
 
   // IMAGEN
-  if (data.image?.trim()) {
+  if (
+    data.image?.trim()
+  ) {
     try {
       embed.setImage(
         data.image.trim()
@@ -200,7 +374,9 @@ function buildDiscordEmbed(data) {
   }
 
   // THUMBNAIL
-  if (data.thumbnail?.trim()) {
+  if (
+    data.thumbnail?.trim()
+  ) {
     try {
       embed.setThumbnail(
         data.thumbnail.trim()
@@ -209,24 +385,33 @@ function buildDiscordEmbed(data) {
   }
 
   // TIMESTAMP
-  if (data.timestamp) {
+  if (
+    data.timestamp
+  ) {
     embed.setTimestamp();
   }
 
   // CAMPOS
   if (
-    Array.isArray(data.fields) &&
+    Array.isArray(
+      data.fields
+    ) &&
     data.fields.length > 0
   ) {
-    for (const field of data.fields) {
+    for (
+      const field of data.fields
+    ) {
       if (
         field.name?.trim() &&
         field.value?.trim()
       ) {
         embed.addFields({
-          name: field.name.trim(),
-          value: field.value.trim(),
-          inline: Boolean(field.inline),
+          name:
+            field.name.trim(),
+          value:
+            field.value.trim(),
+          inline:
+            Boolean(field.inline),
         });
       }
     }
@@ -239,29 +424,34 @@ function buildDiscordEmbed(data) {
 // VISTA DEL EMBED BUILDER
 // ==================================================
 
-function createEmbedBuilderEmbed(data) {
-  const embed = buildDiscordEmbed(data);
+function createEmbedBuilderEmbed(
+  data
+) {
+  const embed =
+    buildDiscordEmbed(
+      data
+    );
 
   /*
-   * Si todavía no hay título ni descripción,
-   * mostramos EMBED BUILDER.
-   *
-   * IMPORTANTE:
-   * Ya NO sobrescribimos el título real
-   * del embed.
+   * Solo mostramos EMBED BUILDER
+   * cuando el embed está completamente
+   * vacío.
    */
 
-  if (
+  const isEmpty =
     !data.title?.trim() &&
     !data.description?.trim() &&
-    (!data.fields ||
-      data.fields.length === 0) &&
-    !data.image &&
-    !data.thumbnail &&
-    !data.author?.name &&
-    !data.footer?.text
-  ) {
-    embed.setTitle("EMBED BUILDER");
+    !data.author?.name?.trim() &&
+    !data.footer?.text?.trim() &&
+    !data.image?.trim() &&
+    !data.thumbnail?.trim() &&
+    !data.fields?.length &&
+    !data.timestamp;
+
+  if (isEmpty) {
+    embed.setTitle(
+      "EMBED BUILDER"
+    );
 
     embed.setDescription(
       "Usa el botón **Editar** para comenzar a crear tu embed."
@@ -278,19 +468,37 @@ function createEmbedBuilderEmbed(data) {
 function createEmbedBuilderButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("embed_edit")
-      .setLabel("Editar")
-      .setStyle(ButtonStyle.Primary),
+      .setCustomId(
+        "embed_edit"
+      )
+      .setLabel(
+        "Editar"
+      )
+      .setStyle(
+        ButtonStyle.Primary
+      ),
 
     new ButtonBuilder()
-      .setCustomId("embed_save")
-      .setLabel("Guardar")
-      .setStyle(ButtonStyle.Success),
+      .setCustomId(
+        "embed_save"
+      )
+      .setLabel(
+        "Guardar"
+      )
+      .setStyle(
+        ButtonStyle.Success
+      ),
 
     new ButtonBuilder()
-      .setCustomId("embed_cancel")
-      .setLabel("Cancelar")
-      .setStyle(ButtonStyle.Danger)
+      .setCustomId(
+        "embed_cancel"
+      )
+      .setLabel(
+        "Cancelar"
+      )
+      .setStyle(
+        ButtonStyle.Danger
+      )
   );
 }
 
@@ -324,7 +532,7 @@ function createEmbedEditMenu() {
           label: "Color",
           value: "color",
           description:
-            "Cambiar el color del embed",
+            "Cambiar el color",
         },
         {
           label: "Autor",
@@ -381,19 +589,22 @@ function createFieldsMenu() {
       )
       .addOptions([
         {
-          label: "Agregar campo",
+          label:
+            "Agregar campo",
           value: "add",
           description:
             "Agregar un nuevo campo",
         },
         {
-          label: "Editar campo",
+          label:
+            "Editar campo",
           value: "edit",
           description:
             "Editar un campo existente",
         },
         {
-          label: "Eliminar campo",
+          label:
+            "Eliminar campo",
           value: "delete",
           description:
             "Eliminar un campo",
@@ -427,7 +638,7 @@ const embedCommand =
     );
 
 // ==================================================
-// COMANDOS /MESSAGE Y /EMBED
+// COMANDOS
 // ==================================================
 
 async function handleMessageCommand(
@@ -447,16 +658,19 @@ async function handleMessageCommand(
     interaction.commandName ===
     "message"
   ) {
+    const builder = {
+      type: "message",
+      guildId:
+        interaction.guildId,
+      channelId:
+        interaction.channelId,
+      messageId: null,
+      content: "",
+    };
+
     builders.set(
       interaction.user.id,
-      {
-        type: "message",
-        guildId:
-          interaction.guildId,
-        channelId:
-          interaction.channelId,
-        content: "",
-      }
+      builder
     );
 
     await interaction.reply({
@@ -467,6 +681,12 @@ async function handleMessageCommand(
         createMessageBuilderButtons(),
       ],
     });
+
+    const message =
+      await interaction.fetchReply();
+
+    builder.messageId =
+      message.id;
 
     return true;
   }
@@ -482,16 +702,19 @@ async function handleMessageCommand(
     const data =
       createDefaultEmbedData();
 
+    const builder = {
+      type: "embed",
+      guildId:
+        interaction.guildId,
+      channelId:
+        interaction.channelId,
+      messageId: null,
+      data,
+    };
+
     builders.set(
       interaction.user.id,
-      {
-        type: "embed",
-        guildId:
-          interaction.guildId,
-        channelId:
-          interaction.channelId,
-        data,
-      }
+      builder
     );
 
     await interaction.reply({
@@ -504,6 +727,12 @@ async function handleMessageCommand(
         createEmbedBuilderButtons(),
       ],
     });
+
+    const message =
+      await interaction.fetchReply();
+
+    builder.messageId =
+      message.id;
 
     return true;
   }
@@ -582,7 +811,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // MESSAGE - EDITAR
+  // MESSAGE - EDITAR CONTENIDO
   // ==================================================
 
   if (
@@ -603,7 +832,9 @@ async function handleMessageInteraction(
         .setCustomId(
           "message_content"
         )
-        .setLabel("Contenido")
+        .setLabel(
+          "Contenido"
+        )
         .setStyle(
           TextInputStyle.Paragraph
         )
@@ -625,6 +856,35 @@ async function handleMessageInteraction(
     await interaction.showModal(
       modal
     );
+
+    return true;
+  }
+
+  // ==================================================
+  // MESSAGE - MODAL CONTENIDO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "message_content_modal"
+  ) {
+    builder.content =
+      interaction.fields
+        .getTextInputValue(
+          "message_content"
+        );
+
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Contenido actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
+    });
 
     return true;
   }
@@ -690,34 +950,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // MESSAGE - MODAL CONTENIDO
-  // ==================================================
-
-  if (
-    interaction.customId ===
-    "message_content_modal"
-  ) {
-    builder.content =
-      interaction.fields.getTextInputValue(
-        "message_content"
-      );
-
-    await interaction.update({
-      embeds: [
-        createMessageBuilder(
-          builder.content
-        ),
-      ],
-      components: [
-        createMessageBuilderButtons(),
-      ],
-    });
-
-    return true;
-  }
-
-  // ==================================================
-  // MESSAGE - MODAL NOMBRE
+  // MESSAGE - GUARDAR NOMBRE
   // ==================================================
 
   if (
@@ -787,28 +1020,34 @@ async function handleMessageInteraction(
         now
       );
 
+      const message =
+        await getBuilderMessage(
+          interaction.client,
+          builder
+        );
+
+      if (message) {
+        await message.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(
+                0x57f287
+              )
+              .setTitle(
+                "MESSAGE BUILDER"
+              )
+              .setDescription(
+                "**Mensaje guardado correctamente.**\n\n" +
+                  `**Nombre:** \`${name}\`\n\n` +
+                  "El mensaje está listo para utilizarse con `/send`."
+              ),
+          ],
+          components: [],
+        });
+      }
+
       builders.delete(
         interaction.user.id
-      );
-
-      await interaction.update({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x57f287)
-            .setTitle(
-              "MESSAGE BUILDER"
-            )
-            .setDescription(
-              "**Mensaje guardado correctamente.**\n\n" +
-                `**Nombre:** \`${name}\`\n\n` +
-                "El mensaje está listo para utilizarse con `/send`."
-            ),
-        ],
-        components: [],
-      });
-
-      console.log(
-        `💾 Mensaje guardado: ${name}`
       );
 
       return true;
@@ -837,16 +1076,26 @@ async function handleMessageInteraction(
     interaction.customId ===
     "message_cancel"
   ) {
+    const message =
+      await getBuilderMessage(
+        interaction.client,
+        builder
+      );
+
+    if (message) {
+      await message.edit({
+        embeds: [],
+        components: [],
+        content:
+          "❌ Constructor cancelado.",
+      });
+    }
+
     builders.delete(
       interaction.user.id
     );
 
-    await interaction.update({
-      embeds: [],
-      components: [],
-      content:
-        "❌ Constructor cancelado.",
-    });
+    await interaction.deferUpdate();
 
     return true;
   }
@@ -859,26 +1108,26 @@ async function handleMessageInteraction(
     interaction.customId ===
     "embed_edit"
   ) {
-    /*
-     * ANTES:
-     * Esto se mandaba como ephemeral.
-     *
-     * AHORA:
-     * Editamos directamente el mensaje
-     * original del builder.
-     */
+    const message =
+      await getBuilderMessage(
+        interaction.client,
+        builder
+      );
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedEditMenu(),
-      ],
-      content: null,
-    });
+    if (message) {
+      await message.edit({
+        embeds: [
+          createEmbedBuilderEmbed(
+            builder.data
+          ),
+        ],
+        components: [
+          createEmbedEditMenu(),
+        ],
+      });
+    }
+
+    await interaction.deferUpdate();
 
     return true;
   }
@@ -904,17 +1153,12 @@ async function handleMessageInteraction(
       builder.data.timestamp =
         !builder.data.timestamp;
 
-      await interaction.update({
-        embeds: [
-          createEmbedBuilderEmbed(
-            builder.data
-          ),
-        ],
-        components: [
-          createEmbedBuilderButtons(),
-        ],
-        content: null,
-      });
+      await updateBuilderMessage(
+        interaction,
+        builder
+      );
+
+      await interaction.deferUpdate();
 
       return true;
     }
@@ -926,14 +1170,26 @@ async function handleMessageInteraction(
     if (
       property === "fields"
     ) {
-      await interaction.update({
-        content:
-          "Selecciona qué quieres hacer con los campos.",
-        embeds: [],
-        components: [
-          createFieldsMenu(),
-        ],
-      });
+      const message =
+        await getBuilderMessage(
+          interaction.client,
+          builder
+        );
+
+      if (message) {
+        await message.edit({
+          embeds: [
+            createEmbedBuilderEmbed(
+              builder.data
+            ),
+          ],
+          components: [
+            createFieldsMenu(),
+          ],
+        });
+      }
+
+      await interaction.deferUpdate();
 
       return true;
     }
@@ -1039,49 +1295,49 @@ async function handleMessageInteraction(
       },
     };
 
-    const modal =
+    const modalConfig =
       modalMap[property];
 
-    if (modal) {
-      const modalBuilder =
+    if (modalConfig) {
+      const modal =
         new ModalBuilder()
           .setCustomId(
-            modal.id
+            modalConfig.id
           )
           .setTitle(
-            modal.title
+            modalConfig.title
           );
 
       const input =
         new TextInputBuilder()
           .setCustomId(
-            modal.customId
+            modalConfig.customId
           )
           .setLabel(
-            modal.label
+            modalConfig.label
           )
           .setStyle(
-            modal.style
+            modalConfig.style
           )
           .setRequired(false)
           .setMaxLength(
-            modal.max
+            modalConfig.max
           )
           .setPlaceholder(
-            modal.placeholder
+            modalConfig.placeholder
           )
           .setValue(
-            modal.value || ""
+            modalConfig.value || ""
           );
 
-      modalBuilder.addComponents(
+      modal.addComponents(
         new ActionRowBuilder().addComponents(
           input
         )
       );
 
       await interaction.showModal(
-        modalBuilder
+        modal
       );
 
       return true;
@@ -1246,7 +1502,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // EMBED - CAMPOS
+  // EMBED - ACCIONES DE CAMPOS
   // ==================================================
 
   if (
@@ -1256,10 +1512,7 @@ async function handleMessageInteraction(
     const action =
       interaction.values[0];
 
-    // ==================================================
     // AGREGAR
-    // ==================================================
-
     if (
       action === "add"
     ) {
@@ -1277,7 +1530,9 @@ async function handleMessageInteraction(
           .setCustomId(
             "field_name"
           )
-          .setLabel("Nombre")
+          .setLabel(
+            "Nombre"
+          )
           .setStyle(
             TextInputStyle.Short
           )
@@ -1289,7 +1544,9 @@ async function handleMessageInteraction(
           .setCustomId(
             "field_value"
           )
-          .setLabel("Valor")
+          .setLabel(
+            "Valor"
+          )
           .setStyle(
             TextInputStyle.Paragraph
           )
@@ -1332,10 +1589,7 @@ async function handleMessageInteraction(
       return true;
     }
 
-    // ==================================================
     // EDITAR
-    // ==================================================
-
     if (
       action === "edit"
     ) {
@@ -1343,11 +1597,11 @@ async function handleMessageInteraction(
         builder.data.fields.length ===
         0
       ) {
-        await interaction.update({
+        await interaction.reply({
           content:
             "❌ No hay campos para editar.",
-          embeds: [],
-          components: [],
+          flags:
+            MessageFlags.Ephemeral,
         });
 
         return true;
@@ -1383,24 +1637,33 @@ async function handleMessageInteraction(
             )
           );
 
-      await interaction.update({
-        content:
-          "Selecciona el campo que quieres editar.",
-        embeds: [],
-        components: [
-          new ActionRowBuilder().addComponents(
-            menu
-          ),
-        ],
-      });
+      const message =
+        await getBuilderMessage(
+          interaction.client,
+          builder
+        );
+
+      if (message) {
+        await message.edit({
+          embeds: [
+            createEmbedBuilderEmbed(
+              builder.data
+            ),
+          ],
+          components: [
+            new ActionRowBuilder().addComponents(
+              menu
+            ),
+          ],
+        });
+      }
+
+      await interaction.deferUpdate();
 
       return true;
     }
 
-    // ==================================================
     // ELIMINAR
-    // ==================================================
-
     if (
       action === "delete"
     ) {
@@ -1408,11 +1671,11 @@ async function handleMessageInteraction(
         builder.data.fields.length ===
         0
       ) {
-        await interaction.update({
+        await interaction.reply({
           content:
             "❌ No hay campos para eliminar.",
-          embeds: [],
-          components: [],
+          flags:
+            MessageFlags.Ephemeral,
         });
 
         return true;
@@ -1443,23 +1706,35 @@ async function handleMessageInteraction(
             )
           );
 
-      await interaction.update({
-        content:
-          "Selecciona el campo que quieres eliminar.",
-        embeds: [],
-        components: [
-          new ActionRowBuilder().addComponents(
-            menu
-          ),
-        ],
-      });
+      const message =
+        await getBuilderMessage(
+          interaction.client,
+          builder
+        );
+
+      if (message) {
+        await message.edit({
+          embeds: [
+            createEmbedBuilderEmbed(
+              builder.data
+            ),
+          ],
+          components: [
+            new ActionRowBuilder().addComponents(
+              menu
+            ),
+          ],
+        });
+      }
+
+      await interaction.deferUpdate();
 
       return true;
     }
   }
 
   // ==================================================
-  // EDITAR CAMPO
+  // EDITAR CAMPO - SELECCIÓN
   // ==================================================
 
   if (
@@ -1485,6 +1760,9 @@ async function handleMessageInteraction(
       return true;
     }
 
+    builder.editingField =
+      index;
+
     const modal =
       new ModalBuilder()
         .setCustomId(
@@ -1499,7 +1777,9 @@ async function handleMessageInteraction(
         .setCustomId(
           "field_name"
         )
-        .setLabel("Nombre")
+        .setLabel(
+          "Nombre"
+        )
         .setStyle(
           TextInputStyle.Short
         )
@@ -1514,7 +1794,9 @@ async function handleMessageInteraction(
         .setCustomId(
           "field_value"
         )
-        .setLabel("Valor")
+        .setLabel(
+          "Valor"
+        )
         .setStyle(
           TextInputStyle.Paragraph
         )
@@ -1555,9 +1837,6 @@ async function handleMessageInteraction(
       )
     );
 
-    builder.editingField =
-      index;
-
     await interaction.showModal(
       modal
     );
@@ -1566,7 +1845,7 @@ async function handleMessageInteraction(
   }
 
   // ==================================================
-  // ELIMINAR CAMPO
+  // ELIMINAR CAMPO - SELECCIÓN
   // ==================================================
 
   if (
@@ -1596,17 +1875,12 @@ async function handleMessageInteraction(
       1
     );
 
-    await interaction.update({
-      content: null,
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-    });
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.deferUpdate();
 
     return true;
   }
@@ -1626,16 +1900,28 @@ async function handleMessageInteraction(
         )
         .trim();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    const updated =
+      await updateBuilderMessage(
+        interaction,
+        builder
+      );
+
+    if (!updated) {
+      await interaction.reply({
+        content:
+          "❌ No pude encontrar el mensaje del builder.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    await interaction.reply({
+      content:
+        "✅ Título actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1656,16 +1942,28 @@ async function handleMessageInteraction(
         )
         .trim();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    const updated =
+      await updateBuilderMessage(
+        interaction,
+        builder
+      );
+
+    if (!updated) {
+      await interaction.reply({
+        content:
+          "❌ No pude encontrar el mensaje del builder.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    await interaction.reply({
+      content:
+        "✅ Descripción actualizada.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1704,16 +2002,16 @@ async function handleMessageInteraction(
     builder.data.color =
       color.toUpperCase();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Color actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1748,16 +2046,16 @@ async function handleMessageInteraction(
         )
         .trim();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Autor actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1785,16 +2083,16 @@ async function handleMessageInteraction(
         )
         .trim();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Footer actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1815,16 +2113,16 @@ async function handleMessageInteraction(
         )
         .trim();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Imagen actualizada.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1845,16 +2143,16 @@ async function handleMessageInteraction(
         )
         .trim();
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Thumbnail actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1899,16 +2197,16 @@ async function handleMessageInteraction(
         inlineText === "yes",
     });
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Campo agregado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -1940,7 +2238,9 @@ async function handleMessageInteraction(
       return true;
     }
 
-    builder.data.fields[index] = {
+    builder.data.fields[
+      index
+    ] = {
       name:
         interaction.fields
           .getTextInputValue(
@@ -1968,16 +2268,16 @@ async function handleMessageInteraction(
 
     delete builder.editingField;
 
-    await interaction.update({
-      embeds: [
-        createEmbedBuilderEmbed(
-          builder.data
-        ),
-      ],
-      components: [
-        createEmbedBuilderButtons(),
-      ],
-      content: null,
+    await updateBuilderMessage(
+      interaction,
+      builder
+    );
+
+    await interaction.reply({
+      content:
+        "✅ Campo actualizado.",
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
@@ -2103,29 +2403,34 @@ async function handleMessageInteraction(
         now
       );
 
+      const message =
+        await getBuilderMessage(
+          interaction.client,
+          builder
+        );
+
+      if (message) {
+        await message.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(
+                0x57f287
+              )
+              .setTitle(
+                "EMBED BUILDER"
+              )
+              .setDescription(
+                "**Embed guardado correctamente.**\n\n" +
+                  `**Nombre:** \`${name}\`\n\n` +
+                  "El embed está listo para utilizarse con `/send`."
+              ),
+          ],
+          components: [],
+        });
+      }
+
       builders.delete(
         interaction.user.id
-      );
-
-      await interaction.update({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x57f287)
-            .setTitle(
-              "EMBED BUILDER"
-            )
-            .setDescription(
-              "**Embed guardado correctamente.**\n\n" +
-                `**Nombre:** \`${name}\`\n\n` +
-                "El embed está listo para utilizarse con `/send`."
-            ),
-        ],
-        components: [],
-        content: null,
-      });
-
-      console.log(
-        `💾 Embed guardado: ${name}`
       );
 
       return true;
@@ -2154,16 +2459,26 @@ async function handleMessageInteraction(
     interaction.customId ===
     "embed_cancel"
   ) {
+    const message =
+      await getBuilderMessage(
+        interaction.client,
+        builder
+      );
+
+    if (message) {
+      await message.edit({
+        embeds: [],
+        components: [],
+        content:
+          "❌ Constructor cancelado.",
+      });
+    }
+
     builders.delete(
       interaction.user.id
     );
 
-    await interaction.update({
-      embeds: [],
-      components: [],
-      content:
-        "❌ Constructor cancelado.",
-    });
+    await interaction.deferUpdate();
 
     return true;
   }
