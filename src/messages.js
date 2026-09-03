@@ -1230,7 +1230,7 @@ async function handleMessageInteraction(
         style:
           TextInputStyle.Paragraph,
         max:
-          4096,
+          4000,
         placeholder:
           "Descripción del embed",
         value:
