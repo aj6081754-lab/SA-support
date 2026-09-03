@@ -2487,12 +2487,402 @@ async function handleMessageInteraction(
 }
 
 // ==================================================
+// SEND COMMAND
+// ==================================================
+
+const sendCommand =
+  new SlashCommandBuilder()
+    .setName("send")
+    .setDescription(
+      "Envía un mensaje o embed guardado."
+    )
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageMessages.toString()
+    )
+    .addStringOption(
+      (option) =>
+        option
+          .setName("tipo")
+          .setDescription(
+            "Selecciona qué quieres enviar."
+          )
+          .setRequired(true)
+          .addChoices(
+            {
+              name: "Mensaje",
+              value: "message",
+            },
+            {
+              name: "Embed",
+              value: "embed",
+            }
+          )
+    )
+    .addStringOption(
+      (option) =>
+        option
+          .setName("contenido")
+          .setDescription(
+            "Selecciona el mensaje o embed guardado."
+          )
+          .setRequired(true)
+          .setAutocomplete(true)
+    )
+    .addChannelOption(
+      (option) =>
+        option
+          .setName("canal")
+          .setDescription(
+            "Canal donde se enviará."
+          )
+          .setRequired(true)
+          .addChannelTypes(0)
+    )
+    .addStringOption(
+      (option) =>
+        option
+          .setName("mention")
+          .setDescription(
+            "Mención opcional."
+          )
+          .setRequired(false)
+          .setAutocomplete(true)
+    );
+
+// ==================================================
+// AUTOCOMPLETADO DE /SEND
+// ==================================================
+
+async function handleSendAutocomplete(
+  interaction
+) {
+  if (
+    !interaction.isAutocomplete()
+  ) {
+    return false;
+  }
+
+  if (
+    interaction.commandName !==
+    "send"
+  ) {
+    return false;
+  }
+
+  const focused =
+    interaction.options.getFocused(true);
+
+  // ==================================================
+  // CONTENIDO
+  // ==================================================
+
+  if (
+    focused.name ===
+    "contenido"
+  ) {
+    const tipo =
+      interaction.options.getString(
+        "tipo"
+      );
+
+    if (!tipo) {
+      await interaction.respond([]);
+      return true;
+    }
+
+    const search =
+      focused.value
+        .toLowerCase();
+
+    let results = [];
+
+    if (
+      tipo === "message"
+    ) {
+      results =
+        db.prepare(`
+          SELECT id, name
+          FROM saved_messages
+          WHERE guild_id = ?
+          AND LOWER(name) LIKE ?
+          ORDER BY name ASC
+          LIMIT 25
+        `).all(
+          interaction.guildId,
+          `%${search}%`
+        );
+
+      await interaction.respond(
+        results.map(
+          (item) => ({
+            name:
+              item.name.slice(
+                0,
+                100
+              ),
+            value:
+              `message:${item.id}`,
+          })
+        )
+      );
+
+      return true;
+    }
+
+    if (
+      tipo === "embed"
+    ) {
+      results =
+        db.prepare(`
+          SELECT id, name
+          FROM saved_embeds
+          WHERE guild_id = ?
+          AND LOWER(name) LIKE ?
+          ORDER BY name ASC
+          LIMIT 25
+        `).all(
+          interaction.guildId,
+          `%${search}%`
+        );
+
+      await interaction.respond(
+        results.map(
+          (item) => ({
+            name:
+              item.name.slice(
+                0,
+                100
+              ),
+            value:
+              `embed:${item.id}`,
+          })
+        )
+      );
+
+      return true;
+    }
+
+    await interaction.respond([]);
+    return true;
+  }
+
+  // ==================================================
+  // MENTION
+  // ==================================================
+
+  if (
+    focused.name ===
+    "mention"
+  ) {
+    const search =
+      focused.value
+        .toLowerCase();
+
+    const choices = [];
+
+    // @everyone
+    if (
+      "everyone".includes(
+        search
+      ) ||
+      search === ""
+    ) {
+      choices.push({
+        name: "@everyone",
+        value:
+          "everyone",
+      });
+    }
+
+    // @here
+    if (
+      "here".includes(
+        search
+      ) ||
+      search === ""
+    ) {
+      choices.push({
+        name: "@here",
+        value:
+          "here",
+      });
+    }
+
+    // ROLES
+    const roles =
+      interaction.guild.roles.cache
+        .filter(
+          (role) =>
+            role.id !==
+              interaction.guild.id &&
+            role.name
+              .toLowerCase()
+              .includes(search)
+        )
+        .sort(
+          (a, b) =>
+            b.position -
+            a.position
+        )
+        .first(23);
+
+    for (
+      const role of roles
+    ) {
+      choices.push({
+        name:
+          `@${role.name}`.slice(
+            0,
+            100
+          ),
+        value:
+          role.id,
+      });
+    }
+
+    await interaction.respond(
+      choices.slice(0, 25)
+    );
+
+    return true;
+  }
+
+  return false;
+}
+
+// ==================================================
+// MANEJAR /SEND
+// ==================================================
+
+async function handleSendInteraction(
+  interaction
+) {
+  if (
+    !interaction.isChatInputCommand()
+  ) {
+    return false;
+  }
+
+  if (
+    interaction.commandName !==
+    "send"
+  ) {
+    return false;
+  }
+
+  const tipo =
+    interaction.options.getString(
+      "tipo"
+    );
+
+  const contenido =
+    interaction.options.getString(
+      "contenido"
+    );
+
+  const canal =
+    interaction.options.getChannel(
+      "canal"
+    );
+
+  const mention =
+    interaction.options.getString(
+      "mention"
+    );
+
+  // ==================================================
+  // VALIDAR CANAL
+  // ==================================================
+
+  if (
+    !canal ||
+    !canal.isTextBased()
+  ) {
+    await interaction.reply({
+      content:
+        "❌ El canal seleccionado no es válido.",
+      flags:
+        MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // OBTENER CONTENIDO
+  // ==================================================
+
+  let saved = null;
+
+  if (
+    tipo === "message"
+  ) {
+    const id =
+      contenido.replace(
+        "message:",
+        ""
+      );
+
+    saved =
+      db.prepare(`
+        SELECT *
+        FROM saved_messages
+        WHERE id = ?
+        AND guild_id = ?
+      `).get(
+        id,
+        interaction.guildId
+      );
+  }
+
+  if (
+    tipo === "embed"
+  ) {
+    const id =
+      contenido.replace(
+        "embed:",
+        ""
+      );
+
+    saved =
+      db.prepare(`
+        SELECT *
+        FROM saved_embeds
+        WHERE id = ?
+        AND guild_id = ?
+      `).get(
+        id,
+        interaction.guildId
+      );
+  }
+
+  if (!saved) {
+    await interaction.reply({
+      content:
+        "❌ No se encontró el contenido guardado.",
+      flags:
+        MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // CREAR MENCIÓN
+  // ==================================================
+
+  let mention
+  
+// ==================================================
 // EXPORTS
 // ==================================================
 
-module.exports = {
-  messageCommand,
-  embedCommand,
-  handleMessageCommand,
-  handleMessageInteraction,
-};
+  module.exports = {
+    messageCommand,
+    embedCommand,
+    sendCommand,
+    handleMessageCommand,
+    handleMessageInteraction,
+    handleSendInteraction,
+    handleSendAutocomplete,
+  };

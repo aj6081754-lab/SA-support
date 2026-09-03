@@ -6,12 +6,22 @@ const {
 const {
   messageCommand,
   embedCommand,
+  sendCommand,
 } = require("./messages");
+
+// ==================================================
+// COMANDOS
+// ==================================================
 
 const commands = [
   messageCommand.toJSON(),
   embedCommand.toJSON(),
+  sendCommand.toJSON(),
 ];
+
+// ==================================================
+// REST
+// ==================================================
 
 const rest = new REST({
   version: "10",
@@ -19,9 +29,15 @@ const rest = new REST({
   process.env.DISCORD_TOKEN
 );
 
+// ==================================================
+// REGISTRAR COMANDOS
+// ==================================================
+
 async function deployCommands() {
   try {
-    console.log("🔄 Registrando comandos...");
+    console.log(
+      "🔄 Registrando comandos..."
+    );
 
     await rest.put(
       Routes.applicationGuildCommands(
@@ -35,6 +51,22 @@ async function deployCommands() {
 
     console.log(
       "✅ Comandos registrados correctamente."
+    );
+
+    console.log(
+      "📋 Comandos registrados:"
+    );
+
+    console.log(
+      "   /message"
+    );
+
+    console.log(
+      "   /embed"
+    );
+
+    console.log(
+      "   /send"
     );
   } catch (error) {
     console.error(

@@ -23,6 +23,8 @@ const {
 const {
   handleMessageCommand,
   handleMessageInteraction,
+  handleSendInteraction,
+  handleSendAutocomplete,
 } = require("./messages");
 
 // ==================================================
@@ -177,6 +179,36 @@ client.on(
         return;
       }
 
+      // ==================================================
+      // AUTOCOMPLETADO DE /SEND
+      // ==================================================
+
+      if (
+        interaction.isAutocomplete()
+      ) {
+        const handled =
+          await handleSendAutocomplete(
+            interaction
+          );
+
+        if (handled) {
+          return;
+        }
+      }
+
+      // ==================================================
+      // /SEND
+      // ==================================================
+
+      const sendHandled =
+        await handleSendInteraction(
+          interaction
+        );
+
+      if (sendHandled) {
+        return;
+      }
+      
       // ==================================================
       // SUGERENCIAS
       // ==================================================
