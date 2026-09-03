@@ -20,6 +20,11 @@ const {
   startTranscriptServer,
 } = require("./transcripts");
 
+const {
+  handleMessageCommand,
+  handleMessageInteraction,
+} = require("./messages");
+
 // ==================================================
 // CLIENTE DISCORD
 // ==================================================
@@ -99,6 +104,18 @@ client.once(
     );
 
     // ==================================================
+    // MESSAGE BUILDER
+    // ==================================================
+
+    console.log(
+      "💬 Message Builder cargado."
+    );
+
+    console.log(
+      "📝 Comando disponible: /message"
+    );
+
+    // ==================================================
     // ENVIAR PANEL DE SUGERENCIAS
     // ==================================================
 
@@ -139,6 +156,28 @@ client.on(
   async (interaction) => {
     try {
       // ==================================================
+      // MESSAGE BUILDER
+      // ==================================================
+
+      const messageCommandHandled =
+        await handleMessageCommand(
+          interaction
+        );
+
+      if (messageCommandHandled) {
+        return;
+      }
+
+      const messageInteractionHandled =
+        await handleMessageInteraction(
+          interaction
+        );
+
+      if (messageInteractionHandled) {
+        return;
+      }
+
+      // ==================================================
       // SUGERENCIAS
       // ==================================================
 
@@ -163,6 +202,7 @@ client.on(
       if (ticketHandled) {
         return;
       }
+
     } catch (error) {
       console.error(
         "❌ Error procesando interacción:",
