@@ -5,10 +5,12 @@ const {
 
 const {
   messageCommand,
+  embedCommand,
 } = require("./messages");
 
 const commands = [
   messageCommand.toJSON(),
+  embedCommand.toJSON(),
 ];
 
 const rest = new REST({
@@ -31,7 +33,9 @@ async function deployCommands() {
       }
     );
 
-    console.log("✅ Comandos registrados correctamente.");
+    console.log(
+      "✅ Comandos registrados correctamente."
+    );
   } catch (error) {
     console.error(
       "❌ Error registrando comandos:",

@@ -9,6 +9,7 @@ const {
   EmbedBuilder,
   PermissionFlagsBits,
   MessageFlags,
+  StringSelectMenuBuilder,
 } = require("discord.js");
 
 const Database = require("better-sqlite3");
@@ -32,6 +33,19 @@ db.prepare(`
   )
 `).run();
 
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS saved_embeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(guild_id, name)
+  )
+`).run();
+
 // ==================================================
 // BUILDERS ACTIVOS
 // ==================================================
@@ -39,18 +53,45 @@ db.prepare(`
 const builders = new Map();
 
 // ==================================================
-// CREAR VISTA DEL BUILDER
+// ESPERAR EL PRIMER MENSAJE DEL USUARIO
+// ==================================================
+
+async function waitForUserMessage(
+  channel,
+  userId
+) {
+  try {
+    const collected =
+      await channel.awaitMessages({
+        filter: (message) =>
+          message.author.id === userId,
+        max: 1,
+        time: 5 * 60 * 1000,
+        errors: ["time"],
+      });
+
+    return collected.first();
+  } catch {
+    return null;
+  }
+}
+
+// ==================================================
+// MESSAGE BUILDER
 // ==================================================
 
 function createMessageBuilder(content = "") {
-  const preview = content.trim() || "Sin contenido";
+  const preview =
+    content.trim() || "Sin contenido";
 
   return new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("MESSAGE BUILDER")
     .setDescription(
       "**Contenido**\n" +
-        `> ${content.trim() || "Sin contenido"}\n\n` +
+        `> ${
+          content.trim() || "Sin contenido"
+        }\n\n` +
         "**Vista previa**\n" +
         "```text\n" +
         preview +
@@ -59,13 +100,15 @@ function createMessageBuilder(content = "") {
 }
 
 // ==================================================
-// BOTONES DEL BUILDER
+// BOTONES MESSAGE BUILDER
 // ==================================================
 
-function createBuilderButtons() {
+function createMessageBuilderButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("message_edit_content")
+      .setCustomId(
+        "message_edit_content"
+      )
       .setLabel("Editar contenido")
       .setStyle(ButtonStyle.Primary),
 
@@ -82,52 +125,428 @@ function createBuilderButtons() {
 }
 
 // ==================================================
-// COMANDO /MESSAGE
+// EMBED BUILDER
 // ==================================================
 
-const messageCommand = new SlashCommandBuilder()
-  .setName("message")
-  .setDescription("Abre el constructor de mensajes.")
-  .setDefaultMemberPermissions(
-    PermissionFlagsBits.ManageMessages.toString()
-  );
-
-// ==================================================
-// EJECUTAR /MESSAGE
-// ==================================================
-
-async function handleMessageCommand(interaction) {
-  if (!interaction.isChatInputCommand()) {
-    return false;
-  }
-
-  if (interaction.commandName !== "message") {
-    return false;
-  }
-
-  builders.set(interaction.user.id, {
-    guildId: interaction.guildId,
-    content: "",
-  });
-
-  await interaction.reply({
-    embeds: [
-      createMessageBuilder(),
-    ],
-    components: [
-      createBuilderButtons(),
-    ],
-  });
-
-  return true;
+function createDefaultEmbedData() {
+  return {
+    title: "",
+    description: "",
+    color: "#5865F2",
+    author: {
+      name: "",
+      iconURL: "",
+      url: "",
+    },
+    footer: {
+      text: "",
+      iconURL: "",
+    },
+    image: "",
+    thumbnail: "",
+    timestamp: false,
+    fields: [],
+  };
 }
 
 // ==================================================
-// INTERACCIONES DEL BUILDER
+// CREAR EMBED REAL
 // ==================================================
 
-async function handleMessageInteraction(interaction) {
-  if (!interaction.isButton() && !interaction.isModalSubmit()) {
+function buildDiscordEmbed(data) {
+  const embed = new EmbedBuilder();
+
+  // --------------------------------------------------
+  // COLOR
+  // --------------------------------------------------
+
+  if (
+    data.color &&
+    /^#[0-9A-Fa-f]{6}$/.test(
+      data.color
+    )
+  ) {
+    embed.setColor(data.color);
+  } else {
+    embed.setColor(0x5865f2);
+  }
+
+  // --------------------------------------------------
+  // TÍTULO
+  // --------------------------------------------------
+
+  if (data.title?.trim()) {
+    embed.setTitle(
+      data.title.trim()
+    );
+  }
+
+  // --------------------------------------------------
+  // DESCRIPCIÓN
+  // --------------------------------------------------
+
+  if (data.description?.trim()) {
+    embed.setDescription(
+      data.description.trim()
+    );
+  }
+
+  // --------------------------------------------------
+  // AUTOR
+  // --------------------------------------------------
+
+  if (data.author?.name?.trim()) {
+    const author = {
+      name: data.author.name.trim(),
+    };
+
+    if (data.author.url?.trim()) {
+      author.url =
+        data.author.url.trim();
+    }
+
+    if (data.author.iconURL?.trim()) {
+      author.iconURL =
+        data.author.iconURL.trim();
+    }
+
+    embed.setAuthor(author);
+  }
+
+  // --------------------------------------------------
+  // FOOTER
+  // --------------------------------------------------
+
+  if (data.footer?.text?.trim()) {
+    const footer = {
+      text: data.footer.text.trim(),
+    };
+
+    if (data.footer.iconURL?.trim()) {
+      footer.iconURL =
+        data.footer.iconURL.trim();
+    }
+
+    embed.setFooter(footer);
+  }
+
+  // --------------------------------------------------
+  // IMAGEN
+  // --------------------------------------------------
+
+  if (data.image?.trim()) {
+    try {
+      embed.setImage(
+        data.image.trim()
+      );
+    } catch {}
+  }
+
+  // --------------------------------------------------
+  // THUMBNAIL
+  // --------------------------------------------------
+
+  if (data.thumbnail?.trim()) {
+    try {
+      embed.setThumbnail(
+        data.thumbnail.trim()
+      );
+    } catch {}
+  }
+
+  // --------------------------------------------------
+  // TIMESTAMP
+  // --------------------------------------------------
+
+  if (data.timestamp) {
+    embed.setTimestamp();
+  }
+
+  // --------------------------------------------------
+  // CAMPOS
+  // --------------------------------------------------
+
+  if (
+    Array.isArray(data.fields) &&
+    data.fields.length > 0
+  ) {
+    for (const field of data.fields) {
+      if (
+        field.name?.trim() &&
+        field.value?.trim()
+      ) {
+        embed.addFields({
+          name: field.name.trim(),
+          value: field.value.trim(),
+          inline:
+            Boolean(field.inline),
+        });
+      }
+    }
+  }
+
+  return embed;
+}
+
+// ==================================================
+// VISTA DEL EMBED BUILDER
+// ==================================================
+
+function createEmbedBuilderEmbed(data) {
+  const embed =
+    buildDiscordEmbed(data);
+
+  embed.setTitle(
+    "EMBED BUILDER"
+  );
+
+  return embed;
+}
+
+// ==================================================
+// BOTONES EMBED BUILDER
+// ==================================================
+
+function createEmbedBuilderButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("embed_edit")
+      .setLabel("Editar")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("embed_save")
+      .setLabel("Guardar")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("embed_cancel")
+      .setLabel("Cancelar")
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+// ==================================================
+// MENÚ DE EDICIÓN DEL EMBED
+// ==================================================
+
+function createEmbedEditMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(
+        "embed_edit_property"
+      )
+      .setPlaceholder(
+        "Selecciona qué quieres editar"
+      )
+      .addOptions([
+        {
+          label: "Título",
+          value: "title",
+          description:
+            "Editar el título del embed",
+        },
+        {
+          label: "Descripción",
+          value: "description",
+          description:
+            "Editar la descripción",
+        },
+        {
+          label: "Color",
+          value: "color",
+          description:
+            "Cambiar el color del embed",
+        },
+        {
+          label: "Autor",
+          value: "author",
+          description:
+            "Editar el autor",
+        },
+        {
+          label: "Footer",
+          value: "footer",
+          description:
+            "Editar el footer",
+        },
+        {
+          label: "Imagen",
+          value: "image",
+          description:
+            "Agregar o cambiar la imagen",
+        },
+        {
+          label: "Thumbnail",
+          value: "thumbnail",
+          description:
+            "Agregar o cambiar el thumbnail",
+        },
+        {
+          label: "Timestamp",
+          value: "timestamp",
+          description:
+            "Activar o desactivar la fecha",
+        },
+        {
+          label: "Campos",
+          value: "fields",
+          description:
+            "Agregar, editar o eliminar campos",
+        },
+      ])
+  );
+}
+
+// ==================================================
+// MENÚ DE CAMPOS
+// ==================================================
+
+function createFieldsMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(
+        "embed_fields_action"
+      )
+      .setPlaceholder(
+        "Selecciona una acción"
+      )
+      .addOptions([
+        {
+          label: "Agregar campo",
+          value: "add",
+          description:
+            "Agregar un nuevo campo",
+        },
+        {
+          label: "Editar campo",
+          value: "edit",
+          description:
+            "Editar un campo existente",
+        },
+        {
+          label: "Eliminar campo",
+          value: "delete",
+          description:
+            "Eliminar un campo",
+        },
+      ])
+  );
+}
+
+// ==================================================
+// COMANDOS
+// ==================================================
+
+const messageCommand =
+  new SlashCommandBuilder()
+    .setName("message")
+    .setDescription(
+      "Abre el constructor de mensajes."
+    )
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageMessages.toString()
+    );
+
+const embedCommand =
+  new SlashCommandBuilder()
+    .setName("embed")
+    .setDescription(
+      "Abre el constructor de embeds."
+    )
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageMessages.toString()
+    );
+
+// ==================================================
+// /MESSAGE
+// ==================================================
+
+async function handleMessageCommand(
+  interaction
+) {
+  if (
+    !interaction.isChatInputCommand()
+  ) {
+    return false;
+  }
+
+  if (
+    interaction.commandName ===
+    "message"
+  ) {
+    builders.set(
+      interaction.user.id,
+      {
+        type: "message",
+        guildId:
+          interaction.guildId,
+        channelId:
+          interaction.channelId,
+        content: "",
+      }
+    );
+
+    await interaction.reply({
+      embeds: [
+        createMessageBuilder(),
+      ],
+      components: [
+        createMessageBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  if (
+    interaction.commandName ===
+    "embed"
+  ) {
+    const data =
+      createDefaultEmbedData();
+
+    builders.set(
+      interaction.user.id,
+      {
+        type: "embed",
+        guildId:
+          interaction.guildId,
+        channelId:
+          interaction.channelId,
+        data,
+      }
+    );
+
+    await interaction.reply({
+      embeds: [
+        createEmbedBuilderEmbed(
+          data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  return false;
+}
+
+// ==================================================
+// INTERACCIONES
+// ==================================================
+
+async function handleMessageInteraction(
+  interaction
+) {
+  if (
+    !interaction.isButton() &&
+    !interaction.isModalSubmit() &&
+    !interaction.isStringSelectMenu()
+  ) {
     return false;
   }
 
@@ -137,63 +556,102 @@ async function handleMessageInteraction(interaction) {
     "message_cancel",
     "message_content_modal",
     "message_name_modal",
+
+    "embed_edit",
+    "embed_save",
+    "embed_cancel",
+    "embed_edit_property",
+    "embed_fields_action",
+    "embed_field_edit_select",
+
+    "embed_title_modal",
+    "embed_description_modal",
+    "embed_color_modal",
+    "embed_author_modal",
+    "embed_footer_modal",
+    "embed_image_modal",
+    "embed_thumbnail_modal",
+
+    "embed_field_add_modal",
+    "embed_field_edit_modal",
+    "embed_field_delete_modal",
+    "embed_name_modal",
   ];
 
-  if (!validIds.includes(interaction.customId)) {
+  if (
+    !validIds.includes(
+      interaction.customId
+    )
+  ) {
     return false;
   }
 
-  const builder = builders.get(interaction.user.id);
+  const builder =
+    builders.get(
+      interaction.user.id
+    );
 
   if (!builder) {
     await interaction.reply({
       content:
         "❌ Este constructor ya no está disponible.",
-      flags: MessageFlags.Ephemeral,
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return true;
   }
 
   // ==================================================
-  // EDITAR CONTENIDO
+  // MESSAGE: EDITAR CONTENIDO
   // ==================================================
 
   if (
     interaction.customId ===
     "message_edit_content"
   ) {
-    const modal = new ModalBuilder()
-      .setCustomId("message_content_modal")
-      .setTitle("Editar contenido");
+    const modal =
+      new ModalBuilder()
+        .setCustomId(
+          "message_content_modal"
+        )
+        .setTitle(
+          "Editar contenido"
+        );
 
-    const contentInput =
+    const input =
       new TextInputBuilder()
-        .setCustomId("message_content")
+        .setCustomId(
+          "message_content"
+        )
         .setLabel("Contenido")
-        .setStyle(TextInputStyle.Paragraph)
+        .setStyle(
+          TextInputStyle.Paragraph
+        )
         .setRequired(false)
+        .setMaxLength(4000)
         .setPlaceholder(
-          "Escribe el contenido del mensaje..."
+          "Escribe el contenido..."
         )
         .setValue(
           builder.content || ""
-        )
-        .setMaxLength(4000);
+        );
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
-        contentInput
+        input
       )
     );
 
-    await interaction.showModal(modal);
+    await interaction.showModal(
+      modal
+    );
 
     return true;
   }
 
   // ==================================================
-  // GUARDAR CONTENIDO DEL MODAL
+  // MESSAGE: MODAL CONTENIDO
   // ==================================================
 
   if (
@@ -212,7 +670,7 @@ async function handleMessageInteraction(interaction) {
         ),
       ],
       components: [
-        createBuilderButtons(),
+        createMessageBuilderButtons(),
       ],
     });
 
@@ -220,32 +678,46 @@ async function handleMessageInteraction(interaction) {
   }
 
   // ==================================================
-  // ABRIR MODAL PARA NOMBRE
+  // MESSAGE: GUARDAR
   // ==================================================
 
   if (
     interaction.customId ===
     "message_save"
   ) {
-    if (!builder.content.trim()) {
+    if (
+      !builder.content.trim()
+    ) {
       await interaction.reply({
         content:
           "❌ No puedes guardar un mensaje vacío.",
-        flags: MessageFlags.Ephemeral,
+        flags:
+          MessageFlags.Ephemeral,
       });
 
       return true;
     }
 
-    const modal = new ModalBuilder()
-      .setCustomId("message_name_modal")
-      .setTitle("Guardar mensaje");
+    const modal =
+      new ModalBuilder()
+        .setCustomId(
+          "message_name_modal"
+        )
+        .setTitle(
+          "Guardar mensaje"
+        );
 
-    const nameInput =
+    const input =
       new TextInputBuilder()
-        .setCustomId("message_name")
-        .setLabel("Nombre del mensaje")
-        .setStyle(TextInputStyle.Short)
+        .setCustomId(
+          "message_name"
+        )
+        .setLabel(
+          "Nombre del mensaje"
+        )
+        .setStyle(
+          TextInputStyle.Short
+        )
         .setRequired(true)
         .setMaxLength(100)
         .setPlaceholder(
@@ -254,17 +726,19 @@ async function handleMessageInteraction(interaction) {
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
-        nameInput
+        input
       )
     );
 
-    await interaction.showModal(modal);
+    await interaction.showModal(
+      modal
+    );
 
     return true;
   }
 
   // ==================================================
-  // GUARDAR EN BASE DE DATOS
+  // MESSAGE: GUARDAR EN DB
   // ==================================================
 
   if (
@@ -282,13 +756,12 @@ async function handleMessageInteraction(interaction) {
       await interaction.reply({
         content:
           "❌ Debes introducir un nombre.",
-        flags: MessageFlags.Ephemeral,
+        flags:
+          MessageFlags.Ephemeral,
       });
 
       return true;
     }
-
-    const now = Date.now();
 
     try {
       const existing =
@@ -305,12 +778,16 @@ async function handleMessageInteraction(interaction) {
       if (existing) {
         await interaction.reply({
           content:
-            `❌ Ya existe un mensaje guardado con el nombre \`${name}\`.`,
-          flags: MessageFlags.Ephemeral,
+            `❌ Ya existe un mensaje llamado \`${name}\`.`,
+          flags:
+            MessageFlags.Ephemeral,
         });
 
         return true;
       }
+
+      const now =
+        Date.now();
 
       db.prepare(`
         INSERT INTO saved_messages (
@@ -339,18 +816,20 @@ async function handleMessageInteraction(interaction) {
         embeds: [
           new EmbedBuilder()
             .setColor(0x57f287)
-            .setTitle("MESSAGE BUILDER")
+            .setTitle(
+              "MESSAGE BUILDER"
+            )
             .setDescription(
-              `**Mensaje guardado correctamente.**\n\n` +
+              "**Mensaje guardado correctamente.**\n\n" +
                 `**Nombre:** \`${name}\`\n\n` +
-                `El mensaje está listo para utilizarse con \`/send\`.`
+                "El mensaje está listo para utilizarse con `/send`."
             ),
         ],
         components: [],
       });
 
       console.log(
-        `💾 Mensaje guardado: ${name} | Servidor: ${builder.guildId} | Usuario: ${interaction.user.tag}`
+        `💾 Mensaje guardado: ${name}`
       );
 
       return true;
@@ -363,7 +842,8 @@ async function handleMessageInteraction(interaction) {
       await interaction.reply({
         content:
           "❌ Ocurrió un error al guardar el mensaje.",
-        flags: MessageFlags.Ephemeral,
+        flags:
+          MessageFlags.Ephemeral,
       });
 
       return true;
@@ -371,12 +851,1247 @@ async function handleMessageInteraction(interaction) {
   }
 
   // ==================================================
-  // CANCELAR
+  // MESSAGE: CANCELAR
   // ==================================================
 
   if (
     interaction.customId ===
     "message_cancel"
+  ) {
+    builders.delete(
+      interaction.user.id
+    );
+
+    await interaction.update({
+      embeds: [],
+      components: [],
+      content:
+        "❌ Constructor cancelado.",
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: EDITAR
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_edit"
+  ) {
+    await interaction.reply({
+      content:
+        "Selecciona qué parte del embed quieres editar.",
+      components: [
+        createEmbedEditMenu(),
+      ],
+      flags:
+        MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: SELECCIONAR PROPIEDAD
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_edit_property"
+  ) {
+    const property =
+      interaction.values[0];
+
+    // ----------------------------------------------
+    // TIMESTAMP
+    // ----------------------------------------------
+
+    if (
+      property === "timestamp"
+    ) {
+      builder.data.timestamp =
+        !builder.data.timestamp;
+
+      await interaction.update({
+        embeds: [
+          createEmbedBuilderEmbed(
+            builder.data
+          ),
+        ],
+        components: [
+          createEmbedBuilderButtons(),
+        ],
+      });
+
+      return true;
+    }
+
+    // ----------------------------------------------
+    // CAMPOS
+    // ----------------------------------------------
+
+    if (
+      property === "fields"
+    ) {
+      await interaction.update({
+        content:
+          "Selecciona qué quieres hacer con los campos.",
+        components: [
+          createFieldsMenu(),
+        ],
+      });
+
+      return true;
+    }
+
+    // ----------------------------------------------
+    // MODALES
+    // ----------------------------------------------
+
+    const modalMap = {
+      title: {
+        id: "embed_title_modal",
+        title: "Editar título",
+        label: "Título",
+        customId: "embed_title",
+        value:
+          builder.data.title,
+        style:
+          TextInputStyle.Short,
+        max: 256,
+        placeholder:
+          "Título del embed",
+      },
+
+      description: {
+        id:
+          "embed_description_modal",
+        title:
+          "Editar descripción",
+        label:
+          "Descripción",
+        customId:
+          "embed_description",
+        value:
+          builder.data.description,
+        style:
+          TextInputStyle.Paragraph,
+        max: 4096,
+        placeholder:
+          "Descripción del embed",
+      },
+
+      color: {
+        id: "embed_color_modal",
+        title: "Editar color",
+        label: "Color HEX",
+        customId: "embed_color",
+        value:
+          builder.data.color,
+        style:
+          TextInputStyle.Short,
+        max: 7,
+        placeholder:
+          "#5865F2",
+      },
+
+      image: {
+        id: "embed_image_modal",
+        title: "Editar imagen",
+        label: "URL de la imagen",
+        customId: "embed_image",
+        value:
+          builder.data.image,
+        style:
+          TextInputStyle.Short,
+        max: 2048,
+        placeholder:
+          "https://ejemplo.com/imagen.png",
+      },
+
+      thumbnail: {
+        id:
+          "embed_thumbnail_modal",
+        title:
+          "Editar thumbnail",
+        label:
+          "URL del thumbnail",
+        customId:
+          "embed_thumbnail",
+        value:
+          builder.data.thumbnail,
+        style:
+          TextInputStyle.Short,
+        max: 2048,
+        placeholder:
+          "https://ejemplo.com/imagen.png",
+      },
+    };
+
+    const config =
+      modalMap[property];
+
+    if (config) {
+      const modal =
+        new ModalBuilder()
+          .setCustomId(config.id)
+          .setTitle(config.title);
+
+      const input =
+        new TextInputBuilder()
+          .setCustomId(
+            config.customId
+          )
+          .setLabel(config.label)
+          .setStyle(config.style)
+          .setRequired(false)
+          .setMaxLength(config.max)
+          .setPlaceholder(
+            config.placeholder
+          )
+          .setValue(
+            config.value || ""
+          );
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          input
+        )
+      );
+
+      await interaction.showModal(
+        modal
+      );
+
+      return true;
+    }
+
+    // ----------------------------------------------
+    // AUTOR
+    // ----------------------------------------------
+
+    if (
+      property === "author"
+    ) {
+      const modal =
+        new ModalBuilder()
+          .setCustomId(
+            "embed_author_modal"
+          )
+          .setTitle(
+            "Editar autor"
+          );
+
+      const name =
+        new TextInputBuilder()
+          .setCustomId(
+            "author_name"
+          )
+          .setLabel(
+            "Nombre del autor"
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(false)
+          .setMaxLength(256)
+          .setValue(
+            builder.data.author
+              .name || ""
+          );
+
+      const icon =
+        new TextInputBuilder()
+          .setCustomId(
+            "author_icon"
+          )
+          .setLabel(
+            "URL del icono"
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(false)
+          .setMaxLength(2048)
+          .setValue(
+            builder.data.author
+              .iconURL || ""
+          );
+
+      const url =
+        new TextInputBuilder()
+          .setCustomId(
+            "author_url"
+          )
+          .setLabel(
+            "URL del autor"
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(false)
+          .setMaxLength(2048)
+          .setValue(
+            builder.data.author
+              .url || ""
+          );
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          name
+        ),
+        new ActionRowBuilder().addComponents(
+          icon
+        ),
+        new ActionRowBuilder().addComponents(
+          url
+        )
+      );
+
+      await interaction.showModal(
+        modal
+      );
+
+      return true;
+    }
+
+    // ----------------------------------------------
+    // FOOTER
+    // ----------------------------------------------
+
+    if (
+      property === "footer"
+    ) {
+      const modal =
+        new ModalBuilder()
+          .setCustomId(
+            "embed_footer_modal"
+          )
+          .setTitle(
+            "Editar footer"
+          );
+
+      const text =
+        new TextInputBuilder()
+          .setCustomId(
+            "footer_text"
+          )
+          .setLabel(
+            "Texto del footer"
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(false)
+          .setMaxLength(2048)
+          .setValue(
+            builder.data.footer
+              .text || ""
+          );
+
+      const icon =
+        new TextInputBuilder()
+          .setCustomId(
+            "footer_icon"
+          )
+          .setLabel(
+            "URL del icono"
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(false)
+          .setMaxLength(2048)
+          .setValue(
+            builder.data.footer
+              .iconURL || ""
+          );
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          text
+        ),
+        new ActionRowBuilder().addComponents(
+          icon
+        )
+      );
+
+      await interaction.showModal(
+        modal
+      );
+
+      return true;
+    }
+  }
+
+  // ==================================================
+  // EMBED: CAMPOS
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_fields_action"
+  ) {
+    const action =
+      interaction.values[0];
+
+    // ----------------------------------------------
+    // AGREGAR
+    // ----------------------------------------------
+
+    if (action === "add") {
+      const modal =
+        new ModalBuilder()
+          .setCustomId(
+            "embed_field_add_modal"
+          )
+          .setTitle(
+            "Agregar campo"
+          );
+
+      const name =
+        new TextInputBuilder()
+          .setCustomId(
+            "field_name"
+          )
+          .setLabel("Nombre")
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(true)
+          .setMaxLength(256);
+
+      const value =
+        new TextInputBuilder()
+          .setCustomId(
+            "field_value"
+          )
+          .setLabel("Valor")
+          .setStyle(
+            TextInputStyle.Paragraph
+          )
+          .setRequired(true)
+          .setMaxLength(1024);
+
+      const inline =
+        new TextInputBuilder()
+          .setCustomId(
+            "field_inline"
+          )
+          .setLabel(
+            "Inline: escribe sí o no"
+          )
+          .setStyle(
+            TextInputStyle.Short
+          )
+          .setRequired(false)
+          .setMaxLength(3)
+          .setPlaceholder(
+            "sí / no"
+          );
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          name
+        ),
+        new ActionRowBuilder().addComponents(
+          value
+        ),
+        new ActionRowBuilder().addComponents(
+          inline
+        )
+      );
+
+      await interaction.showModal(
+        modal
+      );
+
+      return true;
+    }
+
+    // ----------------------------------------------
+    // EDITAR
+    // ----------------------------------------------
+
+    if (
+      action === "edit"
+    ) {
+      if (
+        builder.data.fields
+          .length === 0
+      ) {
+        await interaction.update({
+          content:
+            "❌ No hay campos para editar.",
+          components: [],
+        });
+
+        return true;
+      }
+
+      const menu =
+        new StringSelectMenuBuilder()
+          .setCustomId(
+            "embed_field_edit_select"
+          )
+          .setPlaceholder(
+            "Selecciona un campo"
+          )
+          .addOptions(
+            builder.data.fields.map(
+              (field, index) => ({
+                label:
+                  `${index + 1}. ${field.name}`.slice(
+                    0,
+                    100
+                  ),
+                value:
+                  String(index),
+                description:
+                  field.value.slice(
+                    0,
+                    100
+                  ),
+              })
+            )
+          );
+
+      await interaction.update({
+        content:
+          "Selecciona el campo que quieres editar.",
+        components: [
+          new ActionRowBuilder().addComponents(
+            menu
+          ),
+        ],
+      });
+
+      return true;
+    }
+
+    // ----------------------------------------------
+    // ELIMINAR
+    // ----------------------------------------------
+
+    if (
+      action === "delete"
+    ) {
+      if (
+        builder.data.fields
+          .length === 0
+      ) {
+        await interaction.update({
+          content:
+            "❌ No hay campos para eliminar.",
+          components: [],
+        });
+
+        return true;
+      }
+
+      const menu =
+        new StringSelectMenuBuilder()
+          .setCustomId(
+            "embed_field_delete_select"
+          )
+          .setPlaceholder(
+            "Selecciona un campo"
+          )
+          .addOptions(
+            builder.data.fields.map(
+              (field, index) => ({
+                label:
+                  `${index + 1}. ${field.name}`.slice(
+                    0,
+                    100
+                  ),
+                value:
+                  String(index),
+              })
+            )
+          );
+
+      await interaction.update({
+        content:
+          "Selecciona el campo que quieres eliminar.",
+        components: [
+          new ActionRowBuilder().addComponents(
+            menu
+          ),
+        ],
+      });
+
+      return true;
+    }
+  }
+
+  // ==================================================
+  // EMBED: EDITAR CAMPO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_field_edit_select"
+  ) {
+    const index =
+      Number(interaction.values[0]);
+
+    const field =
+      builder.data.fields[index];
+
+    if (!field) {
+      await interaction.reply({
+        content:
+          "❌ Ese campo ya no existe.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    const modal =
+      new ModalBuilder()
+        .setCustomId(
+          "embed_field_edit_modal"
+        )
+        .setTitle(
+          `Editar campo ${index + 1}`
+        );
+
+    const name =
+      new TextInputBuilder()
+        .setCustomId(
+          "field_name"
+        )
+        .setLabel("Nombre")
+        .setStyle(
+          TextInputStyle.Short
+        )
+        .setRequired(true)
+        .setMaxLength(256)
+        .setValue(
+          field.name
+        );
+
+    const value =
+      new TextInputBuilder()
+        .setCustomId(
+          "field_value"
+        )
+        .setLabel("Valor")
+        .setStyle(
+          TextInputStyle.Paragraph
+        )
+        .setRequired(true)
+        .setMaxLength(1024)
+        .setValue(
+          field.value
+        );
+
+    const inline =
+      new TextInputBuilder()
+        .setCustomId(
+          "field_inline"
+        )
+        .setLabel(
+          "Inline: sí o no"
+        )
+        .setStyle(
+          TextInputStyle.Short
+        )
+        .setRequired(false)
+        .setMaxLength(3)
+        .setValue(
+          field.inline
+            ? "sí"
+            : "no"
+        );
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        name
+      ),
+      new ActionRowBuilder().addComponents(
+        value
+      ),
+      new ActionRowBuilder().addComponents(
+        inline
+      )
+    );
+
+    builder.editingField =
+      index;
+
+    await interaction.showModal(
+      modal
+    );
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: ELIMINAR CAMPO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_field_delete_select"
+  ) {
+    const index =
+      Number(interaction.values[0]);
+
+    if (
+      !builder.data.fields[index]
+    ) {
+      await interaction.reply({
+        content:
+          "❌ Ese campo ya no existe.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    builder.data.fields.splice(
+      index,
+      1
+    );
+
+    await interaction.update({
+      content: null,
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL TÍTULO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_title_modal"
+  ) {
+    builder.data.title =
+      interaction.fields.getTextInputValue(
+        "embed_title"
+      );
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL DESCRIPCIÓN
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_description_modal"
+  ) {
+    builder.data.description =
+      interaction.fields.getTextInputValue(
+        "embed_description"
+      );
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL COLOR
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_color_modal"
+  ) {
+    const color =
+      interaction.fields
+        .getTextInputValue(
+          "embed_color"
+        )
+        .trim();
+
+    if (
+      !/^#[0-9A-Fa-f]{6}$/.test(
+        color
+      )
+    ) {
+      await interaction.reply({
+        content:
+          "❌ El color debe tener el formato `#5865F2`.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    builder.data.color =
+      color.toUpperCase();
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL AUTOR
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_author_modal"
+  ) {
+    builder.data.author.name =
+      interaction.fields.getTextInputValue(
+        "author_name"
+      );
+
+    builder.data.author.iconURL =
+      interaction.fields.getTextInputValue(
+        "author_icon"
+      );
+
+    builder.data.author.url =
+      interaction.fields.getTextInputValue(
+        "author_url"
+      );
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL FOOTER
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_footer_modal"
+  ) {
+    builder.data.footer.text =
+      interaction.fields.getTextInputValue(
+        "footer_text"
+      );
+
+    builder.data.footer.iconURL =
+      interaction.fields.getTextInputValue(
+        "footer_icon"
+      );
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL IMAGEN
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_image_modal"
+  ) {
+    builder.data.image =
+      interaction.fields.getTextInputValue(
+        "embed_image"
+      ).trim();
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: MODAL THUMBNAIL
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_thumbnail_modal"
+  ) {
+    builder.data.thumbnail =
+      interaction.fields.getTextInputValue(
+        "embed_thumbnail"
+      ).trim();
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: AGREGAR CAMPO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_field_add_modal"
+  ) {
+    const name =
+      interaction.fields
+        .getTextInputValue(
+          "field_name"
+        )
+        .trim();
+
+    const value =
+      interaction.fields
+        .getTextInputValue(
+          "field_value"
+        )
+        .trim();
+
+    const inlineText =
+      interaction.fields
+        .getTextInputValue(
+          "field_inline"
+        )
+        .trim()
+        .toLowerCase();
+
+    builder.data.fields.push({
+      name,
+      value,
+      inline:
+        inlineText === "sí" ||
+        inlineText === "si" ||
+        inlineText === "yes",
+    });
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: EDITAR CAMPO
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_field_edit_modal"
+  ) {
+    const index =
+      builder.editingField;
+
+    if (
+      typeof index !==
+        "number" ||
+      !builder.data.fields[index]
+    ) {
+      await interaction.reply({
+        content:
+          "❌ No se encontró el campo.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    builder.data.fields[
+      index
+    ] = {
+      name:
+        interaction.fields
+          .getTextInputValue(
+            "field_name"
+          )
+          .trim(),
+
+      value:
+        interaction.fields
+          .getTextInputValue(
+            "field_value"
+          )
+          .trim(),
+
+      inline:
+        ["sí", "si", "yes"].includes(
+          interaction.fields
+            .getTextInputValue(
+              "field_inline"
+            )
+            .trim()
+            .toLowerCase()
+        ),
+    };
+
+    delete builder.editingField;
+
+    await interaction.update({
+      embeds: [
+        createEmbedBuilderEmbed(
+          builder.data
+        ),
+      ],
+      components: [
+        createEmbedBuilderButtons(),
+      ],
+    });
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: GUARDAR
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_save"
+  ) {
+    const modal =
+      new ModalBuilder()
+        .setCustomId(
+          "embed_name_modal"
+        )
+        .setTitle(
+          "Guardar embed"
+        );
+
+    const input =
+      new TextInputBuilder()
+        .setCustomId(
+          "embed_name"
+        )
+        .setLabel(
+          "Nombre del embed"
+        )
+        .setStyle(
+          TextInputStyle.Short
+        )
+        .setRequired(true)
+        .setMaxLength(100)
+        .setPlaceholder(
+          "Ej: anuncio"
+        );
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        input
+      )
+    );
+
+    await interaction.showModal(
+      modal
+    );
+
+    return true;
+  }
+
+  // ==================================================
+  // EMBED: GUARDAR EN DB
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_name_modal"
+  ) {
+    const name =
+      interaction.fields
+        .getTextInputValue(
+          "embed_name"
+        )
+        .trim();
+
+    if (!name) {
+      await interaction.reply({
+        content:
+          "❌ Debes introducir un nombre.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    try {
+      const existing =
+        db.prepare(`
+          SELECT id
+          FROM saved_embeds
+          WHERE guild_id = ?
+          AND name = ?
+        `).get(
+          builder.guildId,
+          name
+        );
+
+      if (existing) {
+        await interaction.reply({
+          content:
+            `❌ Ya existe un embed llamado \`${name}\`.`,
+          flags:
+            MessageFlags.Ephemeral,
+        });
+
+        return true;
+      }
+
+      const now =
+        Date.now();
+
+      db.prepare(`
+        INSERT INTO saved_embeds (
+          guild_id,
+          user_id,
+          name,
+          data,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        builder.guildId,
+        interaction.user.id,
+        name,
+        JSON.stringify(
+          builder.data
+        ),
+        now,
+        now
+      );
+
+      builders.delete(
+        interaction.user.id
+      );
+
+      await interaction.update({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57f287)
+            .setTitle(
+              "EMBED BUILDER"
+            )
+            .setDescription(
+              "**Embed guardado correctamente.**\n\n" +
+                `**Nombre:** \`${name}\`\n\n` +
+                "El embed está listo para utilizarse con `/send`."
+            ),
+        ],
+        components: [],
+      });
+
+      console.log(
+        `💾 Embed guardado: ${name}`
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        "❌ Error guardando embed:",
+        error
+      );
+
+      await interaction.reply({
+        content:
+          "❌ Ocurrió un error al guardar el embed.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+  }
+
+  // ==================================================
+  // EMBED: CANCELAR
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "embed_cancel"
   ) {
     builders.delete(
       interaction.user.id
@@ -401,6 +2116,7 @@ async function handleMessageInteraction(interaction) {
 
 module.exports = {
   messageCommand,
+  embedCommand,
   handleMessageCommand,
   handleMessageInteraction,
 };
