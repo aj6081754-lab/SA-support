@@ -4,6 +4,9 @@ const {
   Events,
 } = require("discord.js");
 
+const setupWelcome =
+  require("./welcome");
+
 const config = require("./config");
 
 const {
@@ -36,6 +39,7 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
@@ -298,6 +302,8 @@ client.on(
 // ==================================================
 // LOGIN
 // ==================================================
+
+setupWelcome(client);
 
 client.login(
   process.env.DISCORD_TOKEN
