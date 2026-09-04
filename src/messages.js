@@ -213,8 +213,10 @@ function createMessageBuilder(
 // BOTONES MESSAGE BUILDER
 // ==================================================
 
-function createMessageBuilderButtons() {
-  return new ActionRowBuilder().addComponents(
+function createMessageBuilderButtons(
+  editing = false
+) {
+  const buttons = [
     new ButtonBuilder()
       .setCustomId(
         "message_edit_content"
@@ -246,8 +248,26 @@ function createMessageBuilderButtons() {
       )
       .setStyle(
         ButtonStyle.Danger
-      )
-  );
+      ),
+  ];
+
+  if (editing) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(
+          "message_delete"
+        )
+        .setLabel(
+          "Eliminar"
+        )
+        .setStyle(
+          ButtonStyle.Danger
+        )
+    );
+  }
+
+  return new ActionRowBuilder()
+    .addComponents(buttons);
 }
 
 // ==================================================
@@ -975,7 +995,9 @@ async function handleEditInteraction(
         ],
 
         components: [
-          createMessageBuilderButtons(),
+          createMessageBuilderButtons(
+            true
+          ),
         ],
 
         fetchReply: true,
@@ -1128,6 +1150,12 @@ async function handleEditInteraction(
 
         components: [
           createEmbedBuilderButtons(),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId("embed_delete")
+              .setLabel("Eliminar")
+              .setStyle(ButtonStyle.Danger)
+          ),
         ],
 
         fetchReply: true,
@@ -1606,6 +1634,91 @@ async function handleMessageInteraction(
     return true;
   }
 
+  // ==================================================
+  // MESSAGE - ELIMINAR
+  // ==================================================
+
+  if (
+    interaction.customId ===
+    "message_delete"
+  ) {
+    if (
+      !builder.editing ||
+      !builder.savedId
+    ) {
+      await interaction.reply({
+        content:
+          "❌ No hay ningún mensaje guardado para eliminar.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    try {
+      db.prepare(`
+        DELETE FROM saved_messages
+        WHERE id = ?
+        AND guild_id = ?
+      `).run(
+        builder.savedId,
+        builder.guildId
+      );
+
+      const message =
+        await getBuilderMessage(
+          interaction.client,
+          builder
+        );
+
+      if (message) {
+        await message.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(
+                0xed4245
+              )
+              .setTitle(
+                "MESSAGE BUILDER"
+              )
+              .setDescription(
+                "**Mensaje eliminado correctamente.**\n\n" +
+                  `**Nombre:** \`${builder.savedName}\`\n\n` +
+                  "El mensaje fue eliminado de la memoria y ya no aparecerá en `/send` ni en `/edit-message`."
+              ),
+          ],
+
+          components: [],
+
+          content: null,
+        });
+      }
+
+      builders.delete(
+        interaction.user.id
+      );
+
+      await interaction.deferUpdate();
+
+      return true;
+    } catch (error) {
+      console.error(
+        "❌ Error eliminando mensaje:",
+        error
+      );
+
+      await interaction.reply({
+        content:
+          "❌ Ocurrió un error al eliminar el mensaje.",
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+  }
+  
   // ==================================================
   // EMBED - EDITAR
   // ==================================================
