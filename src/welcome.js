@@ -45,6 +45,7 @@ module.exports = function setupWelcome(client) {
           `https://discord.com/channels/1544127376387219516/1544166456458092665`;
 
         await channel.send({
+          content: `${member}`,
           embeds: [
             new EmbedBuilder()
               .setDescription(message),
