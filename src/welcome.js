@@ -1,5 +1,6 @@
 const {
   Events,
+  EmbedBuilder,
 } = require("discord.js");
 
 const WELCOME_CHANNEL_ID =
@@ -44,7 +45,10 @@ module.exports = function setupWelcome(client) {
           `https://discord.com/channels/1544127376387219516/1544166456458092665`;
 
         await channel.send({
-          content: message,
+          embeds: [
+            new EmbedBuilder()
+              .setDescription(message),
+          ],
         });
 
         console.log(
