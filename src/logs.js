@@ -1,5 +1,8 @@
 const {
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require("discord.js");
 
 // ==================================================
@@ -50,6 +53,48 @@ function getLogChannel(guild) {
 }
 
 // ==================================================
+// BOTONES DE LOG
+// ==================================================
+
+function createLogButtons(
+  executorId,
+  messageUrl = null
+) {
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId(
+        `log_executor_${executorId}`
+      )
+      .setLabel(
+        "Id del responsable"
+      )
+      .setStyle(
+        ButtonStyle.Secondary
+      ),
+  ];
+
+  if (messageUrl) {
+    buttons.push(
+      new ButtonBuilder()
+        .setLabel(
+          "Ir al mensaje"
+        )
+        .setStyle(
+          ButtonStyle.Link
+        )
+        .setURL(
+          messageUrl
+        )
+    );
+  }
+
+  return [
+    new ActionRowBuilder()
+      .addComponents(buttons),
+  ];
+}
+
+// ==================================================
 // ENVIAR LOG
 // ==================================================
 
@@ -61,6 +106,7 @@ async function sendLog(
     action = "Acción desconocida",
     details = null,
     color = 0x5865f2,
+    messageUrl = null,
   }
 ) {
   try {
@@ -113,8 +159,17 @@ async function sendLog(
       });
     }
 
+    const components =
+      executor
+        ? createLogButtons(
+            executor.id,
+            messageUrl
+          )
+        : [];
+
     await channel.send({
       embeds: [embed],
+      components,
     });
 
   } catch (error) {
@@ -126,6 +181,42 @@ async function sendLog(
 }
 
 // ==================================================
+// INTERACCIONES DE BOTONES
+// ==================================================
+
+async function handleLogButtonInteraction(
+  interaction
+) {
+  if (
+    !interaction.isButton()
+  ) {
+    return false;
+  }
+
+  if (
+    !interaction.customId.startsWith(
+      "log_executor_"
+    )
+  ) {
+    return false;
+  }
+
+  const executorId =
+    interaction.customId.replace(
+      "log_executor_",
+      ""
+    );
+
+  await interaction.reply({
+    content:
+      `🆔 **ID del responsable:** \`${executorId}\``,
+    ephemeral: true,
+  });
+
+  return true;
+}
+
+// ==================================================
 // EXPORTAR
 // ==================================================
 
@@ -133,4 +224,5 @@ module.exports = {
   sendLog,
   getLogChannel,
   formatDate,
+  handleLogButtonInteraction,
 };
