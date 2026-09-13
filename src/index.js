@@ -7,6 +7,10 @@ const {
 const setupWelcome =
   require("./welcome");
 
+const {
+  sendLog,
+} = require("./logs");
+
 const config = require("./config");
 
 const {
