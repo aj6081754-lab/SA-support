@@ -2,16 +2,10 @@ const {
   Client,
   GatewayIntentBits,
   Events,
-  AuditLogEvent,
 } = require("discord.js");
 
 const setupWelcome =
   require("./welcome");
-
-const {
-  sendLog,
-  handleLogButtonInteraction,
-} = require("./logs");
 
 const config = require("./config");
 
@@ -162,115 +156,15 @@ client.once(
 );
 
 // ==================================================
-// LOGS — MENSAJES ELIMINADOS
-// ==================================================
-
-client.on(
-  Events.MessageDelete,
-  async (message) => {
-    try {
-      if (!message.guild) {
-        return;
-      }
-
-      if (message.author?.bot) {
-        return;
-      }
-
-      let executor = null;
-
-      try {
-        const auditLogs =
-          await message.guild.fetchAuditLogs({
-            type: AuditLogEvent.MessageDelete,
-            limit: 10,
-          });
-
-        const entry =
-          auditLogs.entries.find(
-            (entry) => {
-              if (!entry.executor) {
-                return false;
-              }
-
-              if (
-                entry.target?.id !==
-                message.author?.id
-              ) {
-                return false;
-              }
-
-              return (
-                Date.now() -
-                  entry.createdTimestamp <
-                10000
-              );
-            }
-          );
-
-        if (entry?.executor) {
-          executor =
-            entry.executor;
-        }
-      } catch (error) {
-        console.error(
-          "❌ No se pudo consultar el Audit Log:",
-          error
-        );
-      }
-
-      const messageUrl =
-        `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;
-
-      const content =
-        message.content?.trim()
-          ? message.content
-          : "Contenido no disponible.";
-
-      await sendLog(
-        message.guild,
-        {
-          executor,
-          location:
-            `${message.channel}`,
-          action:
-            `Se eliminó un mensaje de ${
-              message.author
-                ? message.author
-                : "un usuario"
-            }.`,
-          details:
-            `**Contenido:**\n> ${content}`,
-          messageUrl,
-          color: 0xed4245,
-        }
-      );
-
-    } catch (error) {
-      console.error(
-        "❌ Error en log de mensaje eliminado:",
-        error
-      );
-    }
-  }
-);
-
-// ==================================================
 // INTERACCIONES
 // ==================================================
 
 client.on(
   Events.InteractionCreate,
   async (interaction) => {
-    if (
-      await handleLogButtonInteraction(
-        interaction
-      )
-    ) {
-      return;
-    }
+    
     try {
-
+      
       // ==================================================
       // AUTOCOMPLETADO DE /EDIT
       // ==================================================
